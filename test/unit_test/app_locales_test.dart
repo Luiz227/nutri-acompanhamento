@@ -16,7 +16,7 @@ void main() {
       const Locale('zh'),
       const Locale('zh', 'TW'), // variant of a shipped language: still inert
       const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
-      const Locale('pt', 'BR'), // no base language shipped either
+      const Locale('pt', 'BR'), // regional entry; the shipped base is 'pt'
     ];
 
     expect(appLocales(generated), [

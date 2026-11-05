@@ -1,4 +1,13 @@
 # Miscellaneous
+.tools/
+dist/
+server/data/
+**/__pycache__/
+**/*.sqlite3*
+**/*.jks
+**/*.keystore
+.env
+server/.env
 *.class
 *.log
 *.pyc

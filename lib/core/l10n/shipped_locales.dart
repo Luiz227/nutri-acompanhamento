@@ -23,6 +23,7 @@
 /// Keep this file free of imports: `tool/check_locales.dart` runs outside
 /// Flutter and reads the map directly.
 const shippedLocales = <String, String>{
+  'pt': 'Português (Brasil)',
   'en': 'English',
   'de': 'Deutsch',
   'tr': 'Türkçe',

@@ -101,6 +101,7 @@ class SPConst {
   /// Human-readable names of the backend food sources, keyed by
   /// food_source.code. Proper nouns — shown as-is in every app language.
   static const foodSourceDisplayNames = <String, String>{
+    'taco': 'TACO — NEPA/UNICAMP (2011)',
     'fdc_foundation': 'FoodData Central (Foundation Foods)',
     'fdc_sr_legacy': 'FoodData Central (SR Legacy)',
     'fdc_survey': 'FoodData Central (FNDDS Survey)',
@@ -113,6 +114,7 @@ class SPConst {
   /// Compact source labels for chips on list items, where the full
   /// [foodSourceDisplayNames] would not fit.
   static const foodSourceShortNames = <String, String>{
+    'taco': 'TACO',
     'fdc_foundation': 'FDC Foundation',
     'fdc_sr_legacy': 'FDC SR Legacy',
     'fdc_survey': 'FDC Survey',
@@ -126,6 +128,7 @@ class SPConst {
   /// the schema but carry no data yet, so they are not selectable until
   /// their imports land — add them here once they do.
   static const settingsSelectableFoodSources = [
+    'taco',
     'fdc_foundation',
     'fdc_sr_legacy',
     'fdc_survey',
@@ -137,6 +140,7 @@ class SPConst {
   /// Food databases and the info-button fallback for foods without a
   /// per-item detail page (only FDC foods have one).
   static const foodSourceWebsites = <String, String>{
+    'taco': 'https://nepa.unicamp.br/publicacoes/',
     'fdc_foundation': 'https://fdc.nal.usda.gov',
     'fdc_sr_legacy': 'https://fdc.nal.usda.gov',
     'fdc_survey': 'https://fdc.nal.usda.gov',
@@ -170,6 +174,9 @@ class SPConst {
         return 'uk';
       case SupportedLanguage.hu:
       case SupportedLanguage.es:
+      case SupportedLanguage.pt:
+        // Portuguese remains on the base catalogue until translated rows
+        // are verified; OFF can still supply Portuguese product names.
         // food_translation has no Hungarian or Spanish rows yet. Returning
         // the code would cost every search in these languages a
         // guaranteed-empty translation RPC before the English one, plus an

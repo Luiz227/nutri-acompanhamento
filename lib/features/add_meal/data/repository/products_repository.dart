@@ -30,8 +30,13 @@ class ProductsRepository {
 
   final OFFDataSource _offDataSource;
   final SpFoodDataSource _spBackendDataSource;
+  final bool _referenceBackendEnabled;
 
-  ProductsRepository(this._offDataSource, this._spBackendDataSource);
+  ProductsRepository(
+    this._offDataSource,
+    this._spBackendDataSource, {
+    bool referenceBackendEnabled = true,
+  }) : _referenceBackendEnabled = referenceBackendEnabled;
 
   Future<List<MealEntity>> getOFFProductsByString(String searchString) async {
     final offWordResponse = await _offDataSource.fetchSearchWordResults(
@@ -53,7 +58,8 @@ class ProductsRepository {
       if (dto.nutriments == null) continue;
       final meal = MealEntity.fromOFFProduct(dto);
       if (!_keepIfConsistent(meal)) continue;
-      final inUserCountry = userCountryTag != null &&
+      final inUserCountry =
+          userCountryTag != null &&
           (dto.countries_tags?.contains(userCountryTag) ?? false);
       candidates.add(
         _RankedOffProduct(meal, dto.popularity_key ?? 0, i, inUserCountry),
@@ -78,7 +84,8 @@ class ProductsRepository {
     }
 
     double score(_RankedOffProduct p) {
-      final fused = 1 / (_rankFusionK + p.relevanceRank) +
+      final fused =
+          1 / (_rankFusionK + p.relevanceRank) +
           1 / (_rankFusionK + popularityRank[p]!);
       return p.inUserCountry ? fused * _localCountryBoost : fused;
     }
@@ -92,8 +99,9 @@ class ProductsRepository {
 
     final ranked = [...candidates]
       ..sort((a, b) {
-        final byConsistency =
-            consistencyBucket(a).compareTo(consistencyBucket(b));
+        final byConsistency = consistencyBucket(
+          a,
+        ).compareTo(consistencyBucket(b));
         if (byConsistency != 0) return byConsistency;
         return score(b).compareTo(score(a));
       });
@@ -108,6 +116,7 @@ class ProductsRepository {
     String searchString, {
     bool forResolution = false,
   }) async {
+    if (!_referenceBackendEnabled) return const [];
     final spWordResponse = await _spBackendDataSource.fetchSearchWordResults(
       searchString,
       forResolution: forResolution,
@@ -135,10 +144,7 @@ class ProductsRepository {
       _spBackendDataSource.fetchPortions(ids),
     ).wait;
 
-    return [
-      for (final meal in products)
-        _decorate(meal, labels, portions),
-    ];
+    return [for (final meal in products) _decorate(meal, labels, portions)];
   }
 
   /// Applies whichever of the two lookups had something for this meal.
@@ -194,17 +200,19 @@ class ProductsRepository {
       'Dropping ${meal.source.name} item code=${meal.code} '
       'name="${meal.name}" — failed rule: $reason',
     );
-    Sentry.addBreadcrumb(Breadcrumb(
-      category: 'food_import.validation',
-      level: SentryLevel.warning,
-      message: 'Dropped corrupt food entry from search results',
-      data: {
-        'source': meal.source.name,
-        'code': meal.code,
-        'name': meal.name,
-        'rule': reason,
-      },
-    ));
+    Sentry.addBreadcrumb(
+      Breadcrumb(
+        category: 'food_import.validation',
+        level: SentryLevel.warning,
+        message: 'Dropped corrupt food entry from search results',
+        data: {
+          'source': meal.source.name,
+          'code': meal.code,
+          'name': meal.name,
+          'rule': reason,
+        },
+      ),
+    );
     return false;
   }
 }

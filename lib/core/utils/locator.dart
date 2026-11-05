@@ -143,6 +143,7 @@ import 'package:opennutritracker/features/settings/presentation/bloc/custom_meal
 import 'package:opennutritracker/features/settings/presentation/bloc/export_import_bloc.dart';
 import 'package:opennutritracker/features/settings/presentation/bloc/settings_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:opennutritracker/features/add_meal/data/data_sources/taco_food_data_source.dart';
 
 final locator = GetIt.instance;
 
@@ -227,9 +228,7 @@ Future<void> initLocator() async {
   // The iOS home-screen widget's App Group copy. One instance for Home,
   // the language picker, delete-all and the profile switch, so they share
   // the App Group it resolves once from the bundle id.
-  locator.registerLazySingleton<CalorieWidgetStore>(
-    HomeWidgetCalorieStore.new,
-  );
+  locator.registerLazySingleton<CalorieWidgetStore>(HomeWidgetCalorieStore.new);
 
   // Cache manager
   locator.registerLazySingleton<CacheManager>(
@@ -325,15 +324,14 @@ Future<void> initLocator() async {
   // create-from-popup flow on the same tab — both must mutate / observe the
   // same instance so the list refreshes after a new entry is created.
   locator.registerLazySingleton<CustomMealsBloc>(
-    () =>
-        CustomMealsBloc(
-          locator(),
-          locator(),
-          locator(),
-          locator(),
-          locator(),
-          locator(),
-        ),
+    () => CustomMealsBloc(
+      locator(),
+      locator(),
+      locator(),
+      locator(),
+      locator(),
+      locator(),
+    ),
   );
 
   locator.registerFactory<ActivitiesBloc>(() => ActivitiesBloc(locator()));
@@ -450,6 +448,7 @@ Future<void> initLocator() async {
       locator(),
       locator(),
       locator(),
+      tacoFoodDataSource: TacoFoodDataSource(),
     ),
   );
   // Per-navigation, matching how the AddMeal / Products / Food blocs that
@@ -635,7 +634,14 @@ Future<void> initLocator() async {
     () => IntakeRepository(locator()),
   );
   locator.registerLazySingleton<ProductsRepository>(
-    () => ProductsRepository(locator(), locator()),
+    () => ProductsRepository(
+      locator(),
+      locator(),
+      referenceBackendEnabled: const bool.fromEnvironment(
+        'ENABLE_SUPABASE_FOOD_SEARCH',
+        defaultValue: true,
+      ),
+    ),
   );
   locator.registerLazySingleton<UserActivityRepository>(
     () => UserActivityRepository(locator()),

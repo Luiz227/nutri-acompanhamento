@@ -1,0 +1,6 @@
+**
+!server/
+!server/app.py
+!LICENSE
+!NOTICE.md
+!Dockerfile
