@@ -9,6 +9,7 @@
 /// `food_summary`.
 enum SupportedLanguage {
   en,
+  pt,
   de,
   pl,
   zh,
@@ -21,10 +22,12 @@ enum SupportedLanguage {
   es;
 
   factory SupportedLanguage.fromCode(String localeCode) {
-    final languageCode = localeCode.split('_').first;
+    final languageCode = localeCode.split(RegExp('[_-]')).first;
     switch (languageCode) {
       case 'en':
         return SupportedLanguage.en;
+      case 'pt':
+        return SupportedLanguage.pt;
       case 'de':
         return SupportedLanguage.de;
       case 'pl':

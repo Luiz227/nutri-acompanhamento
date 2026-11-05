@@ -1,9 +1,9 @@
 class URLConst {
   static const paCompendium2011URL = "https://pacompendium.com/";
   static const privacyPolicyURLEn =
-      "https://www.iubenda.com/privacy-policy/53501884";
+      "https://github.com/luiz227/nutri-acompanhamento/blob/main/deploy/PRIVACIDADE-TESTE.md";
   static const privacyPolicyURLDe =
-      "https://www.iubenda.com/privacy-policy/53922100";
+      "https://github.com/luiz227/nutri-acompanhamento/blob/main/deploy/PRIVACIDADE-TESTE.md";
 
   /// The privacy policy to open for [languageCode], English by default.
   ///

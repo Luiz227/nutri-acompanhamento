@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:logging/logging.dart';
 import 'package:opennutritracker/core/data/data_source/remote_search_cache_data_source.dart';
@@ -67,6 +68,13 @@ Future<void> _refreshDailyReminder(Locale? locale) =>
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    final license = await rootBundle.loadString('assets/legal/GPL-3.0.txt');
+    final notice = await rootBundle.loadString('assets/legal/NOTICE.md');
+    yield LicenseEntryWithLineBreaks([
+      'Nutri Acompanhamento — derivado de OpenNutriTracker',
+    ], '$notice\n\n$license');
+  });
   LoggerConfig.intiLogger();
   await _bootstrapApp();
 }
@@ -97,6 +105,12 @@ Future<void> _bootstrapApp() async {
 
   final isUserInitialized = await locator<UserDataSource>().hasUserData();
   final configRepo = locator<ConfigRepository>();
+
+  // New profiles in this Brazilian preview start in Portuguese even when
+  // the emulator is configured in English. Later language choices still work.
+  if (!isUserInitialized && await configRepo.getSelectedLocale() == null) {
+    await configRepo.setSelectedLocale('pt');
+  }
 
   final config = await configRepo.getConfig();
   // Android's own per-app language picker and ours are two doors into the
@@ -378,7 +392,8 @@ class _OpenNutriTrackerAppState extends State<OpenNutriTrackerApp>
         NavigationOptions.settingsRoute: (context) => const SettingsScreen(),
         NavigationOptions.accentColourRoute: (context) =>
             const AccentColourScreen(),
-        NavigationOptions.healthSyncRoute: (context) => const HealthSyncScreen(),
+        NavigationOptions.healthSyncRoute: (context) =>
+            const HealthSyncScreen(),
         NavigationOptions.addMealRoute: (context) => const AddMealScreen(),
         NavigationOptions.bulkAddRoute: (context) => const BulkAddScreen(),
         NavigationOptions.scannerRoute: (context) => const ScannerScreen(),

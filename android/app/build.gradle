@@ -91,8 +91,8 @@ android {
     productFlavors {
         develop {
             dimension "version"
-            applicationIdSuffix ".develop"
-            versionNameSuffix "-develop"
+            applicationIdSuffix ".nutriteste"
+            versionNameSuffix "-nutri-teste"
         }
         full {
             dimension "version"
@@ -101,6 +101,10 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+            // Pilot APK: keep shrinking off to make local sideload builds
+            // practical on a small workstation; Dart still compiles AOT.
+            minifyEnabled false
+            shrinkResources false
         }
     }
 

@@ -29,15 +29,32 @@ class MealInfoButton extends StatelessWidget {
     if (infoUrl.isEmpty) return const SizedBox.shrink();
 
     final accent = Theme.of(context).colorScheme.primary;
-    return TextButton.icon(
+    final button = TextButton.icon(
       onPressed: () => _launchUrl(infoUrl),
       icon: Icon(Icons.open_in_new_rounded, size: 20, color: accent),
       label: Text(
         _getInfoLabelText(context),
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(color: accent, fontWeight: FontWeight.w700),
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: accent,
+          fontWeight: FontWeight.w700,
+        ),
         textAlign: TextAlign.center,
       ),
+    );
+    if (backendSource != 'taco') return button;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        button,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            S.of(context).tacoNutritionNotice,
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
     );
   }
 

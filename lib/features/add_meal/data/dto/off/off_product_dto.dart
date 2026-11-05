@@ -38,6 +38,7 @@ class OFFProductDTO {
   final String? product_name_uk;
   final String? product_name_hu;
   final String? product_name_es;
+  final String? product_name_pt;
 
   // Search-a-licious returns brands as a list, the v2 product endpoint as a
   // comma-separated string; normalise both to a single display string.
@@ -80,6 +81,9 @@ class OFFProductDTO {
     switch (supportedLanguage) {
       case SupportedLanguage.en:
         localeName = product_name_en;
+        break;
+      case SupportedLanguage.pt:
+        localeName = product_name_pt;
         break;
       case SupportedLanguage.de:
         localeName = product_name_de;
@@ -135,6 +139,7 @@ class OFFProductDTO {
     this.product_name_uk,
     this.product_name_hu,
     this.product_name_es,
+    this.product_name_pt,
     required this.brands,
     required this.image_front_thumb_url,
     required this.image_front_url,

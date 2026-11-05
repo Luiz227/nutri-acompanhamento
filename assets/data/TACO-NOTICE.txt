@@ -1,0 +1,20 @@
+TACO — Tabela Brasileira de Composição de Alimentos
+Fonte: NEPA/UNICAMP. 4ª edição revisada e ampliada. Campinas, 2011.
+© 2011 Núcleo de Estudos e Pesquisas em Alimentação — Universidade Estadual de Campinas.
+
+Permissão da publicação original (páginas impressas ii e iii):
+“É permitida a reprodução parcial ou total desta obra, desde que citada a fonte.”
+
+Publicação: https://nepa.unicamp.br/wp-content/uploads/sites/27/2023/10/taco_4_edicao_ampliada_e_revisada.pdf
+Planilha: https://www.nepa.unicamp.br/arquivo/uploads/taco-4a-edicao/taco-4a-edicao-2/
+SHA-256 da planilha: a66b8ec528daeabc63bc2b015fc9bd8c6d76b941c2fc0ed93a4311d449302d14
+
+Adaptação: extração determinística para JSON, com valores por 100 g de parte comestível.
+Não são estimadas porções, densidades, ingredientes nem nutrientes ausentes.
+Tr = traço; NA = não aplicável; * = análises em reavaliação; branco = análise não solicitada.
+Esses marcadores e valores inválidos são preservados no JSON, sem conversão em zero.
+597 registros preservados; os seis sem energia utilizável não aparecem na busca para registro.
+As cinco células inconsistentes são identificadas em source_anomalies no JSON.
+
+Os dados da TACO mantêm a permissão da fonte. A licença GPL do aplicativo não
+substitui as condições de reprodução desta publicação.

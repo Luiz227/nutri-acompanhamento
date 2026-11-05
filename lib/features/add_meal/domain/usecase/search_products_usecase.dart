@@ -1,4 +1,5 @@
 import 'package:logging/logging.dart';
+import 'package:opennutritracker/features/add_meal/data/data_sources/taco_food_data_source.dart';
 import 'package:opennutritracker/core/data/data_source/remote_search_cache_data_source.dart';
 import 'package:opennutritracker/core/data/data_source/custom_meal_data_source.dart';
 import 'package:opennutritracker/core/data/data_source/recipe_data_source.dart';
@@ -40,6 +41,7 @@ class SearchProductsUseCase {
   final RemoteSearchCacheDataSource _cachedOffMealDataSource;
   final RecipeDataSource _recipeDataSource;
   final GetConfigUsecase _getConfigUsecase;
+  final TacoFoodDataSource? _tacoFoodDataSource;
 
   SearchProductsUseCase(
     this._productsRepository,
@@ -47,8 +49,9 @@ class SearchProductsUseCase {
     this._customMealDataSource,
     this._cachedOffMealDataSource,
     this._recipeDataSource,
-    this._getConfigUsecase,
-  );
+    this._getConfigUsecase, {
+    TacoFoodDataSource? tacoFoodDataSource,
+  }) : _tacoFoodDataSource = tacoFoodDataSource;
 
   /// [skipRemote] limits the search to local matches (custom meals, recipes,
   /// recent intake, cached results) and does not touch the network — used for
@@ -58,8 +61,12 @@ class SearchProductsUseCase {
     bool skipRemote = false,
   }) async {
     if (skipRemote) {
-      return _buildResult(searchString, const [],
-          remoteSkipped: true, cacheSource: MealSourceEntity.off);
+      return _buildResult(
+        searchString,
+        const [],
+        remoteSkipped: true,
+        cacheSource: MealSourceEntity.off,
+      );
     }
     final remote = await _safeRemoteCall(
       'OFF',
@@ -71,8 +78,12 @@ class SearchProductsUseCase {
     // get their timestamp refreshed and stay until 90 days after the
     // last selection.
     await _cacheRemoteResults(remote.meals);
-    return _buildResult(searchString, remote.meals,
-        remoteFailed: remote.failed, cacheSource: MealSourceEntity.off);
+    return _buildResult(
+      searchString,
+      remote.meals,
+      remoteFailed: remote.failed,
+      cacheSource: MealSourceEntity.off,
+    );
   }
 
   /// Searches the reference-food corpus. "FDC" here names the *data* (USDA
@@ -92,9 +103,24 @@ class SearchProductsUseCase {
     bool skipRemote = false,
     bool forResolution = false,
   }) async {
+    final local = <MealEntity>[];
+    final taco = _tacoFoodDataSource;
+    // TACO supplies grams, not household-portion weights. Keep it in the
+    // explicit manual search until the model resolver can distinguish a
+    // count from an independently verified mass for this source.
+    if (taco != null && !forResolution) {
+      final config = await _getConfigUsecase.getConfig();
+      if (config.isFoodSourceEnabled(TacoFoodDataSource.sourceCode)) {
+        local.addAll(await taco.search(searchString));
+      }
+    }
     if (skipRemote) {
-      return _buildResult(searchString, const [],
-          remoteSkipped: true, cacheSource: MealSourceEntity.fdc);
+      return _buildResult(
+        searchString,
+        local,
+        remoteSkipped: true,
+        cacheSource: MealSourceEntity.fdc,
+      );
     }
     final remote = await _safeRemoteCall(
       'FDC',
@@ -104,8 +130,12 @@ class SearchProductsUseCase {
       ),
     );
     await _cacheRemoteResults(remote.meals);
-    return _buildResult(searchString, remote.meals,
-        remoteFailed: remote.failed, cacheSource: MealSourceEntity.fdc);
+    return _buildResult(
+      searchString,
+      [...local, ...remote.meals],
+      remoteFailed: remote.failed,
+      cacheSource: MealSourceEntity.fdc,
+    );
   }
 
   Future<void> _cacheRemoteResults(List<MealEntity> remote) async {
@@ -115,8 +145,9 @@ class SearchProductsUseCase {
     // earlier (its timestamp got bumped via the intent path) keeps that
     // newer timestamp even when a subsequent search re-includes it,
     // letting it remain at the top of the cache-sorted list.
-    await _cachedOffMealDataSource
-        .cacheFromSearch(remote.map(MealDBO.fromMealEntity));
+    await _cachedOffMealDataSource.cacheFromSearch(
+      remote.map(MealDBO.fromMealEntity),
+    );
   }
 
   /// Run a remote search and fall back to an empty list when the source
@@ -231,9 +262,11 @@ class SearchProductsUseCase {
         .getAllByMostRecentlyTouched()
         .map(MealEntity.fromMealDBO)
         .where((meal) => meal.source == cacheSource)
-        .where((meal) =>
-            meal.backendSource == null ||
-            config.isFoodSourceEnabled(meal.backendSource!))
+        .where(
+          (meal) =>
+              meal.backendSource == null ||
+              config.isFoodSourceEnabled(meal.backendSource!),
+        )
         .where((meal) => _mealMatchesSearch(meal, normalizedSearchString))
         .map((meal) => _freshest(meal, freshByKey))
         .toList();

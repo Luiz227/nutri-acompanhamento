@@ -60,10 +60,10 @@ void main() {
         SupportedLanguage.de,
       );
 
-      // A device with no shipped language at all falls to English, the
+      // A device with no shipped language falls to Brazilian Portuguese, the
       // first shipped locale, as the UI does.
       AppLocale.preferredLocales = () => const [Locale('fr', 'FR')];
-      expect(AppLocale.localeName, 'en');
+      expect(AppLocale.localeName, 'pt');
     });
 
     test('LocaleProvider is its writer, at creation and on update', () {
