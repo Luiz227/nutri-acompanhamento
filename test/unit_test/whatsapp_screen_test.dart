@@ -22,26 +22,37 @@ void main() {
   });
   tearDown(() async => locator.reset());
 
-  testWidgets('explicit consent is required before connecting WhatsApp', (tester) async {
+  testWidgets('explicit consent is required before connecting WhatsApp', (
+    tester,
+  ) async {
     await tester.pumpWidget(const MaterialApp(home: WhatsappScreen()));
     await tester.pumpAndSettle();
     final button = find.widgetWithText(FilledButton, 'Conectar WhatsApp');
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
-    expect(find.text('Acompanhamento no WhatsApp'), findsOneWidget);
+    expect(find.text('Registros do WhatsApp'), findsOneWidget);
+    expect(find.text('Endereço HTTPS do servidor'), findsNothing);
+    await tester.enterText(find.byType(TextField), '5511999999999');
     await tester.tap(find.byType(CheckboxListTile));
     await tester.pump();
     expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
   });
 
-  testWidgets('profile switch blocks enrollment from the old profile screen', (tester) async {
+  testWidgets('profile switch blocks enrollment from the old profile screen', (
+    tester,
+  ) async {
     await tester.pumpWidget(const MaterialApp(home: WhatsappScreen()));
     await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '5511999999999');
     await tester.tap(find.byType(CheckboxListTile));
     await tester.pump();
     store.id = 'profile-two';
     await tester.ensureVisible(find.text('Conectar WhatsApp'));
     await tester.tap(find.text('Conectar WhatsApp'));
     await tester.pump();
-    expect(find.text('O perfil mudou. Feche esta tela e abra novamente.'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('O perfil mudou. Abra esta tela novamente.'),
+      findsOneWidget,
+    );
   });
 }

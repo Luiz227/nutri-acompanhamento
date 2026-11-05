@@ -11,6 +11,12 @@ de aprovação ou suporte dos autores originais a esta versão.
 
 Modificações desta distribuição, 05/11/2026:
 
+Atualização do fluxo de cadastro/WhatsApp: número e autorização no cadastro;
+endereço configurado pelo administrador; registros de refeições, água, peso
+e observações propostos pela IA e salvos somente após CONFIRMAR. Sincronização
+automática no app e consulta determinística à TACO para alimentos identificados.
+O código do servidor usa migração aditiva, sem excluir cadastros existentes.
+
 - Interface em português brasileiro e suporte a nomes portugueses.
 - Catálogo brasileiro TACO/NEPA/UNICAMP (2011) disponível offline, com
   atribuição e tratamento explícito de dados desconhecidos.

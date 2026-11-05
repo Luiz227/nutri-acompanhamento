@@ -1,11 +1,7 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:opennutritracker/core/data/repository/intake_repository.dart';
-import 'package:opennutritracker/core/utils/hive_db_provider.dart';
-import 'package:opennutritracker/core/utils/locator.dart';
-import 'package:opennutritracker/features/whatsapp/nutri_bridge_client.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:opennutritracker/features/whatsapp/bridge_session.dart';
+import 'package:opennutritracker/features/whatsapp/whatsapp_signup.dart';
 
 class WhatsappScreen extends StatefulWidget {
   const WhatsappScreen({super.key});
@@ -13,323 +9,210 @@ class WhatsappScreen extends StatefulWidget {
   State<WhatsappScreen> createState() => _WhatsappScreenState();
 }
 
-class _WhatsappScreenState extends State<WhatsappScreen> {
-  final _server = TextEditingController(
-    text: const String.fromEnvironment('NUTRI_API_URL'),
-  );
-  final _phone = TextEditingController();
-  final _name = TextEditingController();
-  final _storage = const FlutterSecureStorage();
-  late final String _profileId;
-  String? _token, _connectedUrl, _code;
-  String _status = 'Conecte seu WhatsApp para testar o acompanhamento.';
-  bool _consent = false, _busy = false, _verified = false, _active = false;
-  String get _key => 'nutri-bridge-v1:$_profileId';
-  bool get _sameProfile =>
-      locator<HiveDBProvider>().activeProfileId == _profileId;
-
+class _WhatsappScreenState extends State<WhatsappScreen>
+    with WidgetsBindingObserver {
+  late final BridgeSession _session;
+  Map<String, dynamic> _data = {};
+  Timer? _timer;
+  bool _busy = false, _foreground = true, _consent = false;
+  String _phone = '';
   @override
   void initState() {
     super.initState();
-    _profileId = locator<HiveDBProvider>().activeProfileId;
-    _restore();
-  }
-
-  Future<void> _restore() async {
-    await _run(() async {
-      final saved = await _storage.read(key: _key);
-      if (saved == null) return;
-      final data = jsonDecode(saved) as Map<String, dynamic>;
-      _token = data['token'] as String;
-      _connectedUrl = data['url'] as String;
-      _server.text = _connectedUrl!;
-      _phone.text = data['phone'] as String? ?? '';
-      final until = DateTime.tryParse(data['codeUntil'] as String? ?? '');
-      _code = until != null && until.isAfter(DateTime.now())
-          ? data['code'] as String?
-          : null;
-      await _refresh();
+    _session = BridgeSession.current();
+    WidgetsBinding.instance.addObserver(this);
+    BridgeSession.changed.addListener(_load);
+    _load();
+    _refresh();
+    _timer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (_foreground) _refresh();
     });
   }
 
-  Future<void> _run(Future<void> Function() action) async {
-    if (!_sameProfile) {
-      if (mounted) {
-        setState(
-          () => _status = 'O perfil mudou. Feche esta tela e abra novamente.',
-        );
-      }
-      return;
-    }
-    if (mounted) setState(() => _busy = true);
+  Future<void> _load() async {
+    final data = _session.sameProfile
+        ? await _session.load()
+        : <String, dynamic>{
+            'message': 'O perfil mudou. Abra esta tela novamente.',
+          };
+    if (mounted) setState(() => _data = data);
+  }
+
+  Future<void> _refresh() async {
+    if (_busy || !_session.sameProfile) return;
+    setState(() => _busy = true);
     try {
-      await action();
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _status =
-              'Não foi possível concluir. Confira o endereço e a conexão do servidor.',
-        );
-      }
+      await _session.synchronize();
+      await _load();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  NutriBridgeClient _connection({bool existing = true}) {
-    if (existing && (_token == null || _connectedUrl != _server.text.trim())) {
-      throw StateError('Use o endereço da conexão já cadastrada.');
+  Future<void> _connect() async {
+    if (_busy || !_consent || !WhatsappSignup.isValidPhone(_phone)) return;
+    if (!_session.sameProfile) {
+      await _load();
+      return;
     }
-    return NutriBridgeClient(_server.text);
-  }
-
-  Future<void> _enroll() async {
-    if (!_consent) return;
-    final client = _connection(existing: false);
+    setState(() => _busy = true);
     try {
-      final response = await client.request(
-        'POST',
-        '/api/v1/enroll',
-        body: {
-          'phone': _phone.text,
-          'consent': {
-            'granted': true,
-            'version': '2026-11-05-whatsapp-test-v1',
-          },
-        },
-      );
-      final token = response['token'] as String;
-      final code = response['pairingCode'] as String;
-      final url = _server.text.trim();
-      await _storage.write(
-        key: _key,
-        value: jsonEncode({
-          'token': token,
-          'url': url,
-          'phone': _phone.text,
-          'code': code,
-          'codeUntil': DateTime.now()
-              .add(const Duration(minutes: 10))
-              .toIso8601String(),
-        }),
-      );
-      _token = token;
-      _connectedUrl = url;
-      _code = code;
-      _active = true;
-      _verified = false;
-      _status = response['n8nConfigured'] == true
-          ? 'Cadastro salvo. Aguarde a mensagem no WhatsApp e responda com o código abaixo.'
-          : 'Cadastro salvo. O operador ainda precisa configurar o n8n no servidor.';
+      await _session.enroll(_phone);
+      await _load();
     } finally {
-      client.close();
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _refresh() async {
-    final client = _connection();
-    try {
-      final response = await client.request('GET', '/api/v1/me', token: _token);
-      _verified = response['verified'] == true;
-      _active = response['consentActive'] == true;
-      if (_verified || !_active) _code = null;
-      _status = !_active
-          ? 'Acompanhamento cancelado.'
-          : _verified
-          ? 'WhatsApp confirmado. Você pode enviar um resumo do diário para o acompanhamento.'
-          : 'Aguardando confirmação pelo WhatsApp. O código vale por 10 minutos.';
-    } finally {
-      client.close();
-    }
-  }
-
-  Future<void> _shareDiary() async {
-    if (!_active || !_verified) return;
-    final intakes = await locator<IntakeRepository>().getAllIntakesDBO();
-    if (!_sameProfile) throw StateError('Perfil alterado');
-    final cutoff = DateTime.now().subtract(const Duration(days: 7));
-    final recent = intakes.where((i) => i.dateTime.isAfter(cutoff)).toList()
-      ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
-    final lines = recent
-        .take(15)
-        .map(
-          (i) =>
-              '${i.dateTime.toIso8601String().substring(0, 10)}: ${i.meal.name ?? 'Alimento'}, ${i.amount} ${i.unit}',
-        )
-        .join('\n');
-    final client = _connection();
-    try {
-      await client.request(
-        'PUT',
-        '/api/v1/context',
-        token: _token,
-        body: {
-          'displayName': _name.text.trim(),
-          'recentDiarySummary': lines.isEmpty
-              ? 'Nenhuma refeição registrada nos últimos sete dias.'
-              : lines,
-        },
-      );
-      _status =
-          'Resumo enviado: até 15 registros dos últimos sete dias. Novas alterações só serão enviadas ao tocar neste botão novamente.';
-    } finally {
-      client.close();
-    }
-  }
-
-  Future<void> _revoke() async {
-    final client = _connection();
-    try {
-      await client.request('DELETE', '/api/v1/whatsapp', token: _token);
-      _active = false;
-      _code = null;
-      _status = 'Mensagens de acompanhamento canceladas no servidor.';
-    } finally {
-      client.close();
-    }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) _refresh();
   }
 
   @override
   void dispose() {
-    _server.dispose();
-    _phone.dispose();
-    _name.dispose();
+    _timer?.cancel();
+    BridgeSession.changed.removeListener(_load);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Acompanhamento no WhatsApp')),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text(
-          'Versão de teste — assistente virtual. O atendimento não substitui seu nutricionista.',
-        ),
-        const SizedBox(height: 16),
-        Semantics(
-          identifier: 'whatsapp-server',
-          child: TextField(
-            controller: _server,
-            enabled: !_busy && _token == null,
-            keyboardType: TextInputType.url,
-            decoration: const InputDecoration(
-              labelText: 'Endereço HTTPS do servidor',
+  Widget build(BuildContext context) {
+    final records = ((_data['records'] as List?) ?? []).reversed;
+    final until = DateTime.tryParse(_data['codeUntil'] as String? ?? '');
+    return Scaffold(
+      appBar: AppBar(title: const Text('Registros do WhatsApp')),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              'Converse pelo WhatsApp. As anotações que você confirmar aparecerão automaticamente no aplicativo.',
             ),
-          ),
-        ),
-        Semantics(
-          identifier: 'whatsapp-phone',
-          child: TextField(
-            controller: _phone,
-            enabled: !_busy && _token == null,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'WhatsApp com 55 e DDD',
-              hintText: '5511999999999',
+            const SizedBox(height: 16),
+            Text(
+              _data['message'] as String? ??
+                  'Seu acompanhamento ainda não foi conectado.',
             ),
-          ),
-        ),
-        if (_token == null) ...[
-          Semantics(
-            identifier: 'whatsapp-consent',
-            child: CheckboxListTile(
-              value: _consent,
-              onChanged: _busy
-                  ? null
-                  : (value) => setState(() => _consent = value == true),
-              title: const Text(
-                'Autorizo o contato por WhatsApp pela assistente virtual.',
+            if (_data['token'] == null && _data['pending'] != true) ...[
+              WhatsappSignup(
+                onChanged: (phone, consent) => setState(() {
+                  _phone = phone;
+                  _consent = consent;
+                }),
               ),
-              subtitle: const Text(
-                'Seu número e esta autorização serão enviados ao servidor do operador, n8n e Evolution. O resumo do diário só será compartilhado ao tocar em Enviar resumo. Posso cancelar aqui ou enviando SAIR.',
-              ),
-            ),
-          ),
-          Semantics(
-            identifier: 'whatsapp-connect',
-            child: FilledButton(
-              onPressed: !_busy && _consent ? () => _run(_enroll) : null,
-              child: const Text('Conectar WhatsApp'),
-            ),
-          ),
-        ],
-        const SizedBox(height: 16),
-        Text(_status),
-        if (_code != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: SelectableText(
-              'Responda no WhatsApp com este código: $_code',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-        if (_token != null) ...[
-          Semantics(
-            identifier: 'whatsapp-refresh',
-            child: OutlinedButton(
-              onPressed: _busy ? null : () => _run(_refresh),
-              child: const Text('Verificar conexão'),
-            ),
-          ),
-          if (_verified && _active) ...[
-            Semantics(
-              identifier: 'whatsapp-alias',
-              child: TextField(
-                controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Como deseja ser chamado (opcional)',
+              Semantics(
+                identifier: 'whatsapp-connect',
+                child: FilledButton(
+                  onPressed:
+                      !_busy && _consent && WhatsappSignup.isValidPhone(_phone)
+                      ? _connect
+                      : null,
+                  child: const Text('Conectar WhatsApp'),
                 ),
               ),
-            ),
-            Semantics(
-              identifier: 'whatsapp-share-diary',
-              child: FilledButton(
-                onPressed: _busy ? null : () => _run(_shareDiary),
-                child: const Text('Enviar resumo do diário'),
+            ],
+            if (_data['verified'] != true &&
+                _data['pending'] != true &&
+                until != null &&
+                until.isAfter(DateTime.now()))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: SelectableText(
+                  'Responda no WhatsApp com este código: ${_data['code']}',
+                ),
               ),
+            if (_busy) const LinearProgressIndicator(),
+            const SizedBox(height: 20),
+            if (records.isEmpty)
+              const Text(
+                'Refeições, água, peso e observações confirmadas no WhatsApp aparecerão aqui.',
+              ),
+            for (final raw in records)
+              _recordCard(context, Map<String, dynamic>.from(raw as Map)),
+            if (_data['active'] == true || _data['pending'] == true)
+              Semantics(
+                identifier: 'whatsapp-revoke',
+                child: TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          try {
+                            await _session.revoke();
+                            await _load();
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Sem conexão. Envie SAIR no WhatsApp para cancelar.',
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: const Text('Cancelar acompanhamento'),
+                ),
+              ),
+            if (_data['active'] == false && _data['token'] != null)
+              Semantics(
+                identifier: 'whatsapp-reconnect',
+                child: TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          await _session.storage.delete(key: _session.key);
+                          await _load();
+                        },
+                  child: const Text('Conectar novamente'),
+                ),
+              ),
+            const Divider(),
+            const Text(
+              'Assistente virtual. Dúvidas clínicas e alterações de plano devem ser tratadas com seu nutricionista.',
             ),
           ],
-          if (_active)
-            Semantics(
-              identifier: 'whatsapp-revoke',
-              child: TextButton(
-                onPressed: _busy ? null : () => _run(_revoke),
-                child: const Text('Cancelar acompanhamento'),
-              ),
-            ),
-          if (!_active)
-            Semantics(
-              identifier: 'whatsapp-reset',
-              child: TextButton(
-                onPressed: _busy
-                    ? null
-                    : () => _run(() async {
-                        await _storage.delete(key: _key);
-                        _token = null;
-                        _connectedUrl = null;
-                        _code = null;
-                        _consent = false;
-                      }),
-                child: const Text('Conectar novamente'),
-              ),
-            ),
-        ],
-        if (_busy) const Center(child: CircularProgressIndicator()),
-        const Divider(),
-        const Text(
-          'Derivado do OpenNutriTracker, sob GPLv3. As mudanças desta versão e a fonte correspondente estão disponíveis no repositório.',
         ),
-        Semantics(
-          identifier: 'whatsapp-source-code',
-          child: TextButton(
-            onPressed: () => launchUrl(
-              Uri.parse('https://github.com/luiz227/nutri-acompanhamento'),
+      ),
+    );
+  }
+
+  Widget _recordCard(BuildContext context, Map<String, dynamic> record) {
+    const labels = {
+      'meal': 'Refeição',
+      'water': 'Água',
+      'weight': 'Peso',
+      'observation': 'Observação',
+    };
+    final date = DateTime.tryParse(
+      record['occurredAt'] as String? ?? '',
+    )?.toLocal();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${labels[record['kind']] ?? 'Registro'} — ${date == null ? '' : '${date.day}/${date.month}/${date.year}'}',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-            child: const Text('Código-fonte e licença'),
-          ),
+            Text(record['text'] as String? ?? ''),
+            if (record['quantity'] != null)
+              Text('${record['quantity']} ${record['unit']}'),
+            if (record['kind'] == 'meal' && record['foodCode'] == null)
+              const Text(
+                'Cálculo nutricional pendente: alimento não identificado com precisão.',
+              ),
+            if (record['foodCode'] != null)
+              const Text('TACO/NEPA/UNICAMP — refletido no diário alimentar.'),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

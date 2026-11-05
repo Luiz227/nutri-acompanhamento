@@ -6,6 +6,10 @@ Veja [créditos e alterações](NOTICE.md) e [documentação original](README.up
 
 ## O que está preparado
 
+**Fluxo atualizado:** cadastro com WhatsApp → boas-vindas → conversa pelo WhatsApp
+→ confirmação do registro → atualização automática no aplicativo. O usuário
+não precisa preencher endereço de servidor. Veja [o fluxo completo](deploy/FLUXO-WHATSAPP.md).
+
 - Aplicativo Android em português brasileiro, TACO offline e tela
   **Configurações → Acompanhamento no WhatsApp**.
 - APK de teste instalável diretamente, sem Play Store. Android 8 ou superior.
@@ -29,9 +33,9 @@ na área de releases ou pode ser entregue junto com sua fonte correspondente.
 2. Importe [integrations/n8n/nutri-evolution.json](integrations/n8n/nutri-evolution.json).
 3. Configure no n8n o servidor, Evolution, instância e credenciais da IA.
 4. Instale o APK no seu Android e abra a tela de acompanhamento.
-5. Informe o endereço HTTPS do servidor, seu número com 55/DDD e autorize.
+5. Informe seu WhatsApp com 55/DDD e autorize durante o cadastro; o endereço é configurado pelo administrador.
 6. Responda no WhatsApp com o código de seis dígitos mostrado no app.
-7. Toque em Verificar conexão e, se quiser, Enviar resumo do diário.
+7. Converse pelo WhatsApp e responda CONFIRMAR às anotações. Consulte Registros do WhatsApp no app.
 
 Com `AI_RESPONSES_ENABLED=false`, as respostas são fixas para testar o caminho
 completo. Com `true`, o servidor permite a conversa geral da IA do n8n;
@@ -48,10 +52,10 @@ ao mesmo commit/tag, inclusive scripts de compilação e avisos de licença.
 
 ## Dados e privacidade
 
-O diário principal continua no dispositivo. Somente ao autorizar o vínculo o
-telefone é enviado ao servidor, n8n e Evolution; o resumo (até 15 registros de
-sete dias) só é enviado ao tocar no botão correspondente. Ao habilitar IA, o
-contexto autorizado e o histórico recente podem ir ao provedor configurado.
+O diário principal continua no dispositivo. Ao autorizar, o cadastro é enviado
+ao servidor, n8n e Evolution. Os registros confirmados na conversa são salvos
+no servidor e sincronizados no aplicativo. Ao habilitar IA, o contexto autorizado
+e o histórico recente podem ir ao provedor configurado.
 Veja [deploy/PRIVACIDADE-TESTE.md](deploy/PRIVACIDADE-TESTE.md).
 
 ## Testes

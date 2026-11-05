@@ -22,10 +22,12 @@ O fluxo bloqueia o envio enquanto as conexões não forem configuradas.
    o destinatário, o evento, a instância e a validade dessa autorização.
 8. Salva no servidor a aceitação pela Evolution ou a incerteza de envio.
 
-Não inclui lembretes agendados, interpretação de fotos/áudio, prescrição de
-dietas, cálculo de nutrientes ou gravação automática de refeições. A TACO
-continua no aplicativo. A IA não tem ferramentas para alterar o prontuário
-ou o diário e é instruída a nunca afirmar que salvou uma refeição.
+Na versão 2, a IA propõe refeições, água, peso e observações. O servidor valida
+os dados e só grava após CONFIRMAR do paciente. O aplicativo sincroniza os
+registros automaticamente enquanto aberto. Nutrientes vêm apenas da TACO,
+quando há correspondência exata do alimento. Consulte
+`deploy/FLUXO-WHATSAPP.md` na raiz para o cadastro sem endereço de servidor.
+Não inclui lembretes agendados, interpretação de fotos/áudio ou prescrição de dietas.
 Lembretes periódicos exigem um fluxo separado com horários e limites definidos.
 
 ## Configuração no n8n

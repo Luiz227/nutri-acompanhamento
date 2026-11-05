@@ -43,7 +43,7 @@ function simulate(trigger, body, options = {}) {
       calls.push({ name, url, payload });
       switch (name) {
         case 'Consultar servidor do aplicativo': value = options.ignore ? { action: 'ignore' } : job; break;
-        case 'Consultar IA': value = { choices: [{ message: { content: 'Como foi seu almoço?' }, finish_reason: 'stop' }] }; break;
+        case 'Consultar IA': value = { choices: [{ message: { content: JSON.stringify({reply:'Como foi seu almoço?',record:null}) }, finish_reason: 'stop' }] }; break;
         case 'Autorizar e reservar envio': value = options.block ? { approved: false } : {
           ...event, approved: true, instance: 'nutri', text: payload.candidate,
           dispatchId: 'dispatch-demo-0001', expiresAt: new Date(Date.now() + 30000).toISOString(),

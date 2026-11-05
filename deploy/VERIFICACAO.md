@@ -20,3 +20,8 @@ saúde do container; consulte seu resultado, não presuma que passou.
 
 O arquivo local de senha e o certificado da assinatura são excluídos do Git.
 Um backup privado deles é necessário para futuras atualizações do APK.
+
+## Atualização v0.2.0-teste.1
+
+22 testes de servidor e 18 testes do workflow aprovados. Cinco testes Flutter específicos da conexão, persistência, isolamento de perfil e interface aprovados; análise Flutter sem problemas. O build usa versionCode base 69, mantendo a assinatura do teste anterior. O teste real de WhatsApp depende da configuração do operador.
+

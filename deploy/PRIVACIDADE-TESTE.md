@@ -1,6 +1,6 @@
 # Informações de privacidade da versão de teste
 
-Atualizado em 05/11/2026. O operador que publica esta distribuição é responsável
+Atualizado em 05/11/2026 — fluxo de cadastro e registros pelo WhatsApp. O operador que publica esta distribuição é responsável
 pelo servidor e pelo tratamento dos dados. Os autores do OpenNutriTracker original
 não operam este piloto. Antes de usar com pacientes, o responsável deve informar
 sua identidade, contato, fornecedores e condições efetivas de tratamento.
@@ -15,9 +15,14 @@ enviados ao servidor escolhido. O evento de boas-vindas segue ao n8n, à Evoluti
 e ao WhatsApp/Meta. Responder pelo WhatsApp com o código exibido no app confirma
 o vínculo; antes disso não se libera contexto do paciente.
 
-Somente ao tocar em Enviar resumo são compartilhados um nome opcional e até
-15 registros dos últimos sete dias (data, alimento, quantidade e unidade).
-O novo resumo substitui o anterior; não existe sincronização automática.
+Na versão atual, ao autorizar o acompanhamento no cadastro, número, altura,
+peso inicial, data de nascimento e objetivo informado são enviados ao servidor.
+As anotações de refeições, água, peso e observações propostas na conversa só
+são salvas após a resposta CONFIRMAR. Elas são sincronizadas automaticamente
+no app e até 200 anotações recentes ficam no armazenamento seguro por perfil.
+O administrador configura a origem da API em `config/mobile.json`, sem segredos;
+o app não pede esse endereço ao usuário e não envia tokens a uma nova origem
+apenas porque a configuração pública mudou.
 
 Com IA habilitada, o contexto autorizado e até oito mensagens recentes podem
 ser enviados ao provedor configurado no n8n (OpenAI nesta referência). Cada

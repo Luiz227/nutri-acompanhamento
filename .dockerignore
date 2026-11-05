@@ -1,6 +1,11 @@
 **
 !server/
 !server/app.py
+!server/records.py
+!assets/
+!assets/data/
+!assets/data/taco_4ed.json
+!assets/data/TACO-NOTICE.txt
 !LICENSE
 !NOTICE.md
 !Dockerfile

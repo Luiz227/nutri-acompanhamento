@@ -1,7 +1,9 @@
 FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 DATA_DIR=/data PORT=8080
 WORKDIR /app
-COPY app.py /app/app.py
+COPY server/app.py server/records.py /app/
+COPY assets/data/taco_4ed.json /app/taco_4ed.json
+COPY LICENSE NOTICE.md assets/data/TACO-NOTICE.txt /app/legal/
 RUN groupadd --gid 10001 nutri && useradd --uid 10001 --gid nutri --no-create-home nutri && mkdir /data && chown nutri:nutri /data
 USER nutri
 EXPOSE 8080

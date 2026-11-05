@@ -67,10 +67,10 @@ if (!model || model === 'CONFIGURE_MODEL') throw new Error('Selecione um modelo 
 return [{json: makePrompt($json, model)}];`, 1840, -180);
 http('Consultar IA', 'https://api.openai.com/v1/chat/completions', '={{ JSON.stringify($json) }}',
   'Nutri - IA (Authorization)', 2060, -180, { onError: 'continueRegularOutput' });
-code('Ler resposta da IA', [agent.parseReply],
-  'return [{json: {...$("Aplicar autorização").first().json, candidate: parseReply($json)}}];', 2280, -180);
+code('Ler resposta da IA', [agent.parseAssistantResult],
+  'return [{json: {...$("Aplicar autorização").first().json, ...parseAssistantResult($json)}}];', 2280, -180);
 http('Autorizar e reservar envio', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/reserve" }}',
-  '={{ JSON.stringify({eventId: $json.eventId, userId: $json.userId, phone: $json.phone, kind: $json.action, candidate: $json.candidate}) }}',
+  '={{ JSON.stringify({eventId: $json.eventId, userId: $json.userId, phone: $json.phone, kind: $json.action, candidate: $json.candidate, record: $json.record ?? null}) }}',
   'Nutri - API do aplicativo', 2520, -40);
 condition('Envio liberado?', '={{ $json.approved === true }}', 2740, -40);
 code('Validar destinatário', [agent.validateDispatch], `
@@ -84,7 +84,7 @@ code('Classificar resultado do envio', [agent.deliveryReceipt],
 http('Salvar resultado no servidor', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/result" }}',
   '={{ JSON.stringify($json) }}', 'Nutri - API do aplicativo', 3620, -120);
 code('Concluir evento', [], 'return [{json: {ok: true}}];', 3860, 160);
-add('Leia antes de ativar', 'stickyNote', 1, { content: `## Nutri + Evolution API v2\n**Importação desativada.**\n1. Leia README.md e deploy/EASYPANEL.md na raiz.\n2. Publique o servidor server/app.py e configure seu volume.\n3. Configure credenciais e URLs nos nós.\n4. Escolha o modelo de IA e habilite enabled no nó Configurar conexões.\n5. Teste com seu próprio número antes de publicar.\n\nO servidor usa respostas fixas por padrão; AI_RESPONSES_ENABLED=true libera conversa geral. A IA não prescreve, calcula nutrientes ou salva refeições neste fluxo. SAIR é persistido antes da confirmação.`, width: 570, height: 360 }, 0, -450);
+add('Leia antes de ativar', 'stickyNote', 1, { content: `## Nutri + Evolution API v2\n**Importação desativada.**\n1. Leia README.md e deploy/EASYPANEL.md na raiz.\n2. Publique o servidor server/app.py e configure seu volume.\n3. Configure credenciais e URLs nos nós.\n4. Escolha o modelo de IA e habilite enabled no nó Configurar conexões.\n5. Teste com seu próprio número antes de publicar.\n\nO servidor usa respostas fixas por padrão; AI_RESPONSES_ENABLED=true libera conversa geral. A IA propõe refeições, água, peso e observações. O servidor salva somente após CONFIRMAR do paciente e calcula nutrientes apenas para alimentos identificados na TACO. Não há prescrição. SAIR é persistido antes da confirmação.`, width: 570, height: 360 }, 0, -450);
 
 link('Cadastro do aplicativo', 'Validar cadastro'); link('Mensagem da Evolution', 'Filtrar mensagem');
 link('Validar cadastro', 'Configurar conexões'); link('Filtrar mensagem', 'Configurar conexões');

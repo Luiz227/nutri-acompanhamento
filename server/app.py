@@ -9,11 +9,13 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, urlsplit
+from records import Records
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
 
@@ -59,6 +61,7 @@ class Store:
             attempts INTEGER NOT NULL DEFAULT 0, next_at REAL NOT NULL DEFAULT 0);
         ''')
         self.db.commit()
+        self.records = Records(self.db)
 
     def enroll(self, body):
         phone = re.sub(r'[\s()+.-]', '', str(body.get('phone', '')))
@@ -71,10 +74,22 @@ class Store:
         if not version:
             raise Problem(400, 'Versão do consentimento obrigatória.')
         now = time.time()
-        user_id, token, code = str(uuid.uuid4()), secrets.token_urlsafe(40), str(secrets.randbelow(900000) + 100000)
+        token = body.get('appToken') or secrets.token_urlsafe(40)
+        code = body.get('pairingCode') or str(secrets.randbelow(900000) + 100000)
+        if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9_-]{40,128}', token) or not isinstance(code, str) or not re.fullmatch(r'\d{6}', code):
+            raise Problem(400, 'Credencial de instalação inválida.')
+        user_id = str(uuid.uuid4())
         event_id = 'registration:' + str(uuid.uuid4())
         at = datetime.now(timezone.utc).isoformat()
         with self.lock, self.db:
+            existing = self.db.execute('SELECT * FROM patients WHERE token_hash=?', (digest(token),)).fetchone()
+            if existing:
+                if existing['phone'] != phone:
+                    raise Problem(409, 'Esta instalação já está vinculada a outro telefone.')
+                valid_code = existing['code_hash'] and hmac.compare_digest(existing['code_hash'], digest(code))
+                return {'userId': existing['id'], 'token': token, 'pairingCode': code if valid_code else None,
+                        'expiresInSeconds': max(0, int(existing['code_until'] - now)),
+                        'verified': bool(existing['verified']), 'consentActive': bool(existing['consent'])}
             # Global cap is deliberately conservative for a small pilot.
             recent = self.db.execute('SELECT count(*) FROM patients WHERE created>?', (now - 3600,)).fetchone()[0]
             same = self.db.execute('SELECT count(*) FROM patients WHERE phone=? AND created>?', (phone, now - 3600)).fetchone()[0]
@@ -82,6 +97,18 @@ class Store:
                 raise Problem(429, 'Limite de solicitações. Tente novamente mais tarde.')
             self.db.execute('INSERT INTO patients(id,token_hash,phone,consent,consent_at,consent_version,code_hash,code_until,created,registration_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (user_id, digest(token), phone, 1, at, version, digest(code), now + 600, now, event_id))
+            profile = body.get('profile', {})
+            if isinstance(profile, dict):
+                fields = {}
+                for name, low, high in [('heightCm', 30, 300), ('weightKg', 1, 600)]:
+                    value = profile.get(name)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high:
+                        fields[name] = value
+                for name in ('birthday', 'goal'):
+                    if isinstance(profile.get(name), str):
+                        fields[name] = profile[name][:60]
+                self.db.execute('UPDATE patients SET context=? WHERE id=?',
+                    (json.dumps({'profileSummary': 'Dados informados no cadastro, não são uma prescrição: ' + json.dumps(fields, ensure_ascii=False)}), user_id))
             event = {'eventId': event_id, 'userId': user_id, 'phone': phone,
                      'consent': {'granted': True, 'at': at, 'version': version}}
             self.db.execute('INSERT INTO notifications(id,body) VALUES(?,?)', (event_id, json.dumps(event)))
@@ -177,7 +204,9 @@ class Store:
                             self.db.execute('UPDATE patients SET attempts=attempts+1 WHERE phone=? AND verified=0', (phone,))
                         return {'action': 'ignore'}
                     action, optout = 'assistant', False
-                    if re.search(r'\b(rem[eé]dio|medicamento|dose|dosagem|sintoma|suplemento|prescreva|prescri[cç][aã]o|diabetes|gestante|gr[aá]vida|desmaio)\b', text, re.I):
+                    if text.upper() in ('CONFIRMAR', 'CANCELAR REGISTRO'):
+                        action, text = 'reply', self.records.confirm(p['id'], text.upper() == 'CONFIRMAR')
+                    elif re.search(r'\b(rem[eé]dio|medicamento|dose|dosagem|suplemento|prescreva|prescri[cç][aã]o)\b', text, re.I):
                         action, text = 'reply', 'Para dúvidas clínicas, sintomas, medicamentos ou suplementos, procure seu nutricionista ou profissional de saúde. A assistente virtual ajuda somente com o diário alimentar e hábitos gerais.'
                     elif not self.allow_ai:
                         action, text = 'reply', PILOT_REPLY
@@ -197,7 +226,9 @@ class Store:
                 'verified': bool(p['verified']), 'consentActive': bool(p['consent']),
                 'optOutPersisted': optout, 'text': text, 'message': text,
                 'context': json.loads(p['context']) if p['verified'] else {},
-                'history': [dict(r) for r in reversed(history)] if p['verified'] else []}
+                'history': [dict(r) for r in reversed(history)] if p['verified'] else [],
+                'catalogueCandidates': self.records.candidates(text) if action == 'assistant' else [],
+                'currentTime': datetime.now(timezone(timedelta(hours=-3))).isoformat()}
 
     def reserve(self, body, instance):
         with self.lock, self.db:
@@ -208,6 +239,9 @@ class Store:
             if not p or p['phone'] != body.get('phone'):
                 raise Problem(403, 'Destinatário inválido.')
             if self.db.execute('SELECT id FROM dispatches WHERE event_id=?', (event['id'],)).fetchone():
+                return {'approved': False}
+            count = self.db.execute('SELECT count(*) FROM dispatches WHERE patient_id=? AND created>?', (p['id'], time.time() - 3600)).fetchone()[0]
+            if count >= 20 and not event['optout']:
                 return {'approved': False}
             if event['optout']:
                 if p['consent']:
@@ -222,14 +256,15 @@ class Store:
                 if event['action'] == 'assistant':
                     candidate = body.get('candidate')
                     text = candidate.strip() if self.allow_ai and isinstance(candidate, str) and 0 < len(candidate.strip()) <= 1800 else PILOT_REPLY
+                    if self.allow_ai and body.get('record') is not None:
+                        try:
+                            text = self.records.propose(p['id'], event['id'], body['record'])
+                        except (ValueError, TypeError, OverflowError):
+                            text = 'Antes de registrar, preciso confirmar os dados: refeições em gramas, água em ml/l, peso em kg/g, ou o texto da observação. Pode informar novamente?'
                 elif event['action'] == 'reply':
                     text = event['text']
                 else:
                     text = 'Olá! Sou a assistente virtual de acompanhamento nutricional do aplicativo. Para confirmar a conexão, envie o código exibido no aplicativo. Se não foi você quem solicitou, envie SAIR.'
-            # Prevent two in-flight sends for the same person and cap pilot frequency.
-            count = self.db.execute('SELECT count(*) FROM dispatches WHERE patient_id=? AND created>?', (p['id'], time.time() - 3600)).fetchone()[0]
-            if count >= 20 and not event['optout']:
-                return {'approved': False}
             dispatch_id = 'dispatch:' + str(uuid.uuid4())
             self.db.execute('INSERT INTO dispatches(id,event_id,patient_id,status,created) VALUES(?,?,?,?,?)',
                 (dispatch_id, event['id'], p['id'], 'reserved', time.time()))
@@ -308,7 +343,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 2, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}
@@ -338,6 +373,13 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
                     data['n8nConfigured'] = n8n_configured
                 elif path == '/api/v1/me' and self.command == 'GET':
                     data = store.me(token)
+                elif path == '/api/v1/records' and self.command == 'GET':
+                    patient = store.patient(token)
+                    after = int(parse_qs(urlsplit(self.path).query).get('after', ['0'])[0])
+                    if after < 0:
+                        raise Problem(400, 'Cursor inválido.')
+                    with store.lock:
+                        data = store.records.list(patient['id'], after)
                 elif path == '/api/v1/whatsapp' and self.command == 'DELETE':
                     data = store.revoke(token)
                 elif path == '/api/v1/context' and self.command == 'PUT':

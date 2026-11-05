@@ -1,4 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:opennutritracker/features/whatsapp/bridge_session.dart';
+import 'package:opennutritracker/features/whatsapp/whatsapp_screen.dart';
+import 'package:opennutritracker/features/profile/presentation/utils/profile_switch_coordinator.dart';
 import 'package:opennutritracker/core/domain/usecase/get_config_usecase.dart';
 import 'package:opennutritracker/core/presentation/widgets/add_item_bottom_sheet.dart';
 import 'package:opennutritracker/core/presentation/widgets/demo_mode_banner.dart';
@@ -25,6 +29,8 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _selectedPageIndex = 0;
   bool _isDemoData = false;
+  Timer? _whatsappTimer;
+  bool _foreground = true;
 
   /// Guards against two lifecycle events asking the platform at once. The
   /// platform side clears the flag on read, so a race would not open the
@@ -39,10 +45,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadConfigDrivenUi();
+    _syncWhatsapp();
+    _whatsappTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (_foreground) _syncWhatsapp();
+    });
   }
 
   @override
   void dispose() {
+    _whatsappTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -50,11 +61,25 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    _foreground = state == AppLifecycleState.resumed;
     // The activity is singleTop, so Health Connect reaching a process that is
     // already running never rebuilds this screen — a resume is the only signal
     // that an intent arrived.
     if (state == AppLifecycleState.resumed) {
+      _syncWhatsapp();
       _maybeOpenHealthRationale();
+    }
+  }
+
+  Future<void> _syncWhatsapp() async {
+    try {
+      final session = BridgeSession.current();
+      await session.synchronize();
+      if (mounted && session.sameProfile) {
+        ProfileSwitchCoordinator.reloadTabBlocs();
+      }
+    } catch (_) {
+      /* Keep local tracking available offline. */
     }
   }
 
@@ -125,6 +150,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       body: Column(
         children: [
           if (_isDemoData) const DemoModeBanner(),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Semantics(
+              identifier: 'main-whatsapp-records',
+              child: TextButton.icon(
+                icon: const Icon(Icons.chat_outlined),
+                label: const Text('Registros do WhatsApp'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const WhatsappScreen(),
+                  ),
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: IndexedStack(
               index: _selectedPageIndex,

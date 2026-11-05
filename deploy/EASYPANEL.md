@@ -59,10 +59,10 @@ do nó Mensagem da Evolution, com seu cabeçalho secreto. Instância igual nos t
 
 1. Instale o APK ARM64 no Android e permita a instalação por esse navegador,
    quando solicitado pelo sistema.
-2. Crie o perfil e abra Configurações → Acompanhamento no WhatsApp.
-3. Informe o HTTPS da API, número com 55/DDD e autorização. Toque em Conectar.
+2. Crie o perfil e informe seu WhatsApp com 55 e DDD durante o cadastro.
+3. Autorize o acompanhamento e conclua o cadastro. O endereço do servidor já vem configurado no app.
 4. Responda à mensagem recebida no WhatsApp com o código mostrado no app (10 min).
-5. Toque em Verificar conexão e, opcionalmente, Enviar resumo do diário.
+5. O aplicativo verifica a conexão e sincroniza os registros automaticamente enquanto está aberto.
 6. Envie uma mensagem comum. No piloto a resposta é fixa; com IA habilitada,
    use perguntas gerais e dados fictícios.
 7. Envie SAIR e confirme que o acompanhamento fica cancelado no aplicativo.
