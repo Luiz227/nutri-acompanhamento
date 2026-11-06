@@ -59,6 +59,33 @@ class RecordTests(unittest.TestCase):
         record = self.store.records.list(self.patient['id'])['records'][0]
         self.assertNotIn('nutrientsPer100g', record)
 
+    def test_mussarela_synonym_uses_taco_and_discloses_match_before_confirmation(self):
+        draft = self.propose({'kind': 'meal', 'text': 'mussarela', 'quantity': 7, 'unit': 'g'})
+        self.assertIn('TACO: Queijo, mozarela', draft['text'])
+        self.store.ingest(self.event('CONFIRMAR', 'confirm-cheese-19'), 'nutri')
+        record = self.store.records.list(self.patient['id'])['records'][0]
+        self.assertEqual(record['foodCode'], 'taco:463')
+        self.assertEqual(record['quantity'], 7)
+
+    def test_ambiguous_ham_and_common_bread_are_not_guessed(self):
+        self.propose([{'kind': 'meal', 'text': 'presunto', 'quantity': 8, 'unit': 'g'},
+                      {'kind': 'meal', 'text': 'pão de forma comum', 'quantity': 50, 'unit': 'g'}])
+        self.store.ingest(self.event('CONFIRMAR', 'confirm-ambiguous-20'), 'nutri')
+        for record in self.store.records.list(self.patient['id'])['records']:
+            self.assertNotIn('foodCode', record)
+
+    def test_candidates_use_synonyms_short_food_words_and_previous_user_context(self):
+        candidates = self.store.records.candidates('pão mussarela presunto')
+        self.assertIn({'name': 'Queijo, mozarela'}, candidates)
+        self.assertTrue(any('Pão,' in r['name'] for r in candidates))
+        self.propose({'kind': 'observation', 'text': 'Comi mussarela'})
+        # Simulate the quantity arriving after a previous user message.
+        self.store.db.execute('INSERT INTO history(patient_id,role,content,created) VALUES(?,?,?,?)',
+            (self.patient['id'], 'user', 'Comi mussarela', 0))
+        self.store.db.commit()
+        job = self.store.ingest(self.event('7 gramas', 'quantity-next-message-21'), 'nutri')
+        self.assertIn({'name': 'Queijo, mozarela'}, job['catalogueCandidates'])
+
     def test_units_dates_and_quantities_fail_closed(self):
         for raw in [{'kind': 'meal', 'text': 'Arroz', 'quantity': 1, 'unit': 'prato'},
                     {'kind': 'water', 'text': 'Água', 'quantity': True, 'unit': 'ml'},

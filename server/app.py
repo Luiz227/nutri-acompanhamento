@@ -227,7 +227,8 @@ class Store:
                 'optOutPersisted': optout, 'text': text, 'message': text,
                 'context': json.loads(p['context']) if p['verified'] else {},
                 'history': [dict(r) for r in reversed(history)] if p['verified'] else [],
-                'catalogueCandidates': self.records.candidates(text) if action == 'assistant' else [],
+                'catalogueCandidates': self.records.candidates(' '.join(
+                    r['content'] for r in reversed(history) if r['role'] == 'user') + ' ' + text) if action == 'assistant' else [],
                 'currentTime': datetime.now(timezone(timedelta(hours=-3))).isoformat()}
 
     def reserve(self, body, instance):

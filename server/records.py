@@ -14,6 +14,20 @@ def normalized(text):
                    if not unicodedata.combining(c))).strip()
 
 
+# Explicit synonyms only: never infer fat content, preparation, or bread type.
+FOOD_ALIASES = {
+    'mussarela': 'Queijo, mozarela',
+    'mucarela': 'Queijo, mozarela',
+    'mozarela': 'Queijo, mozarela',
+    'queijo mussarela': 'Queijo, mozarela',
+    'queijo mucarela': 'Queijo, mozarela',
+    'pao de forma integral': 'Pão, trigo, forma, integral',
+    'pao frances': 'Pão, trigo, francês',
+    'presunto com capa de gordura': 'Presunto, com capa de gordura',
+    'presunto sem capa de gordura': 'Presunto, sem capa de gordura',
+}
+
+
 def catalogue():
     file = Path(__file__).with_name('taco_4ed.json')
     if not file.exists():
@@ -64,8 +78,12 @@ class Records:
           CREATE INDEX IF NOT EXISTS records_owner ON records(patient_id,seq);''')
 
     def candidates(self, text):
-        tokens = [t for t in normalized(text).split() if len(t) >= 4]
-        scored = [(sum(t in normalized(f['name']).split() for t in tokens), f) for f in self.foods]
+        query = normalized(text)
+        tokens = {t for t in query.split() if len(t) >= 3 and t not in ('com', 'uma', 'meu', 'hoje', 'mais')}
+        aliases = {normalized(name) for alias, name in FOOD_ALIASES.items()
+                   if f' {alias} ' in f' {query} '}
+        scored = [(sum(t in normalized(f['name']).split() for t in tokens)
+                   + (10 if normalized(f['name']) in aliases else 0), f) for f in self.foods]
         return [{'name': f['name']} for score, f in sorted(scored, key=lambda pair: -pair[0]) if score > 0][:12]
 
     def propose(self, patient_id, event_id, raw):
@@ -77,8 +95,10 @@ class Records:
             raise ValueError('Divida descrições longas em mais de uma mensagem.')
         for record in records:
             if record['kind'] == 'meal':
-                # Only an exact canonical name selects nutrients; never guess preparation.
-                matches = [f for f in self.foods if normalized(f['name']) == normalized(record['text'])]
+                # Match canonical names or reviewed synonyms, never fuzzy guesses.
+                name = normalized(record['text'])
+                name = normalized(FOOD_ALIASES.get(name, name))
+                matches = [f for f in self.foods if normalized(f['name']) == name]
                 if len(matches) == 1:
                     food = matches[0]
                     record.update(foodCode=f"taco:{food['id']}", foodName=food['name'],
@@ -90,6 +110,8 @@ class Records:
         for index, record in enumerate(records):
             amount = f" — {record['quantity']:g} {record['unit']}" if 'quantity' in record else ''
             nutrition = ' (Sem cálculo nutricional: alimento não identificado na TACO)' if record.get('nutritionStatus') else ''
+            if record.get('foodName'):
+                nutrition = f" (TACO: {record['foodName']})"
             date = datetime.fromisoformat(record['occurredAt']).astimezone(timezone(timedelta(hours=-3))).strftime('%d/%m/%Y %H:%M')
             lines.append(f"{index+1}. {labels[record['kind']]} — {record['text']}{amount} — {date} (Brasília){nutrition}.")
         message = 'Entendi:\n' + '\n'.join(lines) + '\nAinda não salvei. Para salvar no aplicativo, responda CONFIRMAR. Para descartar, responda CANCELAR REGISTRO.'
