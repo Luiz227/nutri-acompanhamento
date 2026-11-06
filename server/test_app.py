@@ -28,6 +28,15 @@ class BridgeTests(unittest.TestCase):
     def verify(self):
         return self.store.ingest(self.event(self.enrollment['pairingCode']), 'nutri')
 
+    def test_accented_instance_verifies_and_reserves_with_exact_name(self):
+        event = {**self.event(self.enrollment['pairingCode']),
+                 'instance': 'Nutrição', 'eventId': 'evo:Nutrição:accent-1'}
+        job = self.store.ingest(event, 'Nutrição')
+        self.assertTrue(job['verified'])
+        result = self.store.reserve({'eventId': job['eventId'], 'userId': job['userId'],
+            'phone': job['phone'], 'candidate': 'Olá'}, 'Nutrição')
+        self.assertEqual(result['instance'], 'Nutrição')
+
     def reserve(self, job):
         return self.store.reserve({'eventId': job['eventId'], 'userId': job['userId'],
             'phone': job['phone'], 'candidate': 'Mensagem da IA'}, 'nutri')

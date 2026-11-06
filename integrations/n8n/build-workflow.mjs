@@ -50,7 +50,7 @@ for (const key of ['backendBaseUrl', 'evolutionBaseUrl']) {
   if (!config[key].startsWith('https://') || config[key].includes('.example')) throw new Error('Configure HTTPS em ' + key);
   if (config[key].endsWith('/')) config[key] = config[key].slice(0, -1);
 }
-if (!/^[\\w-]{1,100}$/.test(config.instance)) throw new Error('Instância inválida');
+if (!/^[\\p{L}\\p{M}\\p{N}_-]{1,100}$/u.test(config.instance)) throw new Error('Instância inválida');
 if ($json.kind === 'incoming' && $json.instance !== config.instance) throw new Error('Instância não autorizada');
 return [{json: {...$json, config}}];`, 480, 130);
 condition('Evento aceito?', '={{ $json.kind !== "ignored" }}', 700, 130);

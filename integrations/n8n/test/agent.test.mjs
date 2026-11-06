@@ -8,6 +8,16 @@ import { normalizeApp, normalizeEvolution, routeJob, makePrompt, parseReply,
 const inbound = (text = 'Olá') => ({ event: 'messages.upsert', instance: 'nutri',
   data: { key: { id: 'msg-123', remoteJid: '5511999999999@s.whatsapp.net', fromMe: false },
     message: { conversation: text } } });
+
+test('accented instance is preserved and unsafe instance names are rejected', () => {
+  const body = { ...inbound(), instance: 'Nutrição' };
+  const event = normalizeEvolution(body);
+  assert.equal(event.instance, 'Nutrição');
+  assert.equal(event.eventId, 'evo:Nutrição:msg-123');
+  for (const instance of ['../nutri', 'nutri/test', 'nutri\n', '', 'a'.repeat(101)]) {
+    assert.equal(normalizeEvolution({ ...body, instance }), null);
+  }
+});
 const job = () => ({ eventId: 'event-12345678', action: 'assistant',
   userId: 'patient-1', phone: '5511999999999', verified: true, consentActive: true,
   message: 'Meu almoço foi arroz e feijão', context: {}, history: [] });

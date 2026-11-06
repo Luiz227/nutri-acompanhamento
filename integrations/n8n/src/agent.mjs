@@ -22,7 +22,7 @@ export function normalizeEvolution(body) {
   const id = data.key.id;
   const instance = body.instance;
   if (typeof id !== 'string' || !id || id.length > 180 ||
-      typeof instance !== 'string' || !/^[\w-]{1,100}$/.test(instance)) return null;
+      typeof instance !== 'string' || !/^[\p{L}\p{M}\p{N}_-]{1,100}$/u.test(instance)) return null;
   const text = data.message?.conversation ?? data.message?.extendedTextMessage?.text;
   if (typeof text !== 'string' || !text.trim()) return null;
   // Commands are exact, never inferred by an LLM. Preserve SAIR even in a long message.
