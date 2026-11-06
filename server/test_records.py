@@ -89,6 +89,26 @@ class RecordTests(unittest.TestCase):
         self.assertIn('sódio', draft['text'])
         self.assertLessEqual(len(draft['text']), 1800)
 
+    def test_quantity_prefix_is_removed_and_unspecified_chicken_asks_preparation(self):
+        draft = self.propose({'kind': 'meal', 'text': '100 g de filé de frango', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'})
+        self.assertIn('como foi preparado', draft['text'])
+        self.assertNotIn('CONFIRMAR', draft['text'])
+        self.assertEqual(self.store.db.execute("SELECT count(*) FROM records WHERE status='pending'").fetchone()[0], 0)
+        self.assertIn({'name': 'Frango, peito, sem pele, grelhado'}, self.store.records.candidates('100 g de filé de frango'))
+
+    def test_fully_specified_chicken_with_quantity_prefix_uses_taco(self):
+        draft = self.propose({'kind': 'meal', 'text': '100g de peito de frango sem pele grelhado', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'})
+        self.assertIn('TACO: Frango, peito, sem pele, grelhado', draft['text'])
+        self.assertNotIn('100g de', draft['text'])
+        self.store.ingest(self.event('CONFIRMAR', 'confirm-chicken-23'), 'nutri')
+        record = self.store.records.list(self.patient['id'])['records'][0]
+        self.assertEqual(record['foodCode'], 'taco:410')
+        self.assertGreater(record['nutrition']['energyKcal'], 0)
+
+    def test_conflicting_description_weight_is_rejected(self):
+        with self.assertRaises(ValueError):
+            validate_record({'kind': 'meal', 'text': '200g de frango', 'quantity': 100, 'unit': 'g'})
+
     def test_ambiguous_ham_and_common_bread_are_not_guessed(self):
         self.propose([{'kind': 'meal', 'text': 'presunto', 'quantity': 8, 'unit': 'g'},
                       {'kind': 'meal', 'text': 'pão de forma comum', 'quantity': 50, 'unit': 'g'}])

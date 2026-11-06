@@ -25,6 +25,10 @@ FOOD_ALIASES = {
     'pao frances': 'Pão, trigo, francês',
     'presunto com capa de gordura': 'Presunto, com capa de gordura',
     'presunto sem capa de gordura': 'Presunto, sem capa de gordura',
+    'peito de frango sem pele grelhado': 'Frango, peito, sem pele, grelhado',
+    'file de peito de frango sem pele grelhado': 'Frango, peito, sem pele, grelhado',
+    'peito de frango sem pele cozido': 'Frango, peito, sem pele, cozido',
+    'peito de frango sem pele cru': 'Frango, peito, sem pele, cru',
 }
 
 MEAL_LABELS = {'breakfast': 'Café da manhã', 'lunch': 'Almoço', 'dinner': 'Jantar', 'snack': 'Lanche'}
@@ -70,6 +74,14 @@ def validate_record(raw):
         if amount > limit:
             raise ValueError('Quantidade fora do limite de um registro; confirme o valor.')
         result.update(quantity=round(amount, 6), unit={'meal': 'g', 'water': 'ml', 'weight': 'kg'}[raw['kind']])
+        if raw['kind'] == 'meal':
+            prefix = re.match(r'^\s*(\d+(?:[.,]\d+)?)\s*(?:gramas?|g)\b\s*(?:de\s+)?', result['text'], re.I)
+            if prefix:
+                if abs(float(prefix.group(1).replace(',', '.')) - amount) > .000001:
+                    raise ValueError('A quantidade na descrição não coincide com a porção.')
+                result['text'] = result['text'][prefix.end():].strip()
+                if not result['text']:
+                    raise ValueError('Informe o nome do alimento.')
     date = raw.get('occurredAt')
     if date:
         if not isinstance(date, str):
@@ -99,7 +111,9 @@ class Records:
         aliases = {normalized(name) for alias, name in FOOD_ALIASES.items()
                    if f' {alias} ' in f' {query} '}
         scored = [(sum(t in normalized(f['name']).split() for t in tokens)
-                   + (10 if normalized(f['name']) in aliases else 0), f) for f in self.foods]
+                   + (10 if normalized(f['name']) in aliases else 0)
+                   + (3 if 'frango' in tokens and ('file' in tokens or 'peito' in tokens)
+                      and normalized(f['name']).startswith('frango peito ') else 0), f) for f in self.foods]
         return [{'name': f['name']} for score, f in sorted(scored, key=lambda pair: -pair[0]) if score > 0][:12]
 
     def propose(self, patient_id, event_id, raw):
@@ -115,6 +129,10 @@ class Records:
                 name = normalized(record['text'])
                 name = normalized(FOOD_ALIASES.get(name, name))
                 matches = [f for f in self.foods if normalized(f['name']) == name]
+                if not matches:
+                    # Word order and punctuation do not change a fully specified food.
+                    words = sorted(name.split())
+                    matches = [f for f in self.foods if sorted(normalized(f['name']).split()) == words]
                 if len(matches) == 1:
                     food = matches[0]
                     record.update(foodCode=f"taco:{food['id']}", foodName=food['name'],
@@ -123,6 +141,12 @@ class Records:
                                            if isinstance(food['nutrients'].get(column), (int, float)) else None
                                            for key, column in NUTRIENTS.items()}
                 else:
+                    if 'frango' in name.split():
+                        self.db.execute("UPDATE records SET status='superseded' WHERE patient_id=? AND status='pending'", (patient_id,))
+                        return (f"Você informou {record['quantity']:g} g de {record['text']}. "
+                                'Para calcular os nutrientes certos, me conta: qual era o corte e como foi preparado? '
+                                'Por exemplo, peito sem pele grelhado, peito sem pele cozido ou filé à milanesa. '
+                                'Mantenho a quantidade que você informou; ainda não salvei esta refeição.')
                     record['nutritionStatus'] = 'unknown'
         labels = {'meal': 'Refeição', 'water': 'Água', 'weight': 'Peso', 'observation': 'Observação'}
         lines = []
