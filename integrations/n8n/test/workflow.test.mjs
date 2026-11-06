@@ -9,6 +9,7 @@ const flow = JSON.parse(readFileSync(new URL('../nutri-evolution.json', import.m
 function simulate(trigger, body, options = {}) {
   const memory = {}, calls = [];
   let name = trigger, value = { body }, steps = 0;
+  let queue = [], texts = [];
   const event = body.eventId ? { eventId: body.eventId, userId: body.userId, phone: body.phone } :
     { eventId: `evo:nutri:${body.data?.key?.id}`, userId: 'patient-demo-0001', phone: '5511999999999' };
   const job = { ...event, verified: true, consentActive: true, action: options.action ?? 'assistant',
@@ -18,14 +19,14 @@ function simulate(trigger, body, options = {}) {
     return vm.runInNewContext(source, {
       $json: json,
       $input: { first: () => ({ json }) },
-      $: key => ({ first: () => ({ json: memory[key] }) }),
+      $: key => ({ first: () => ({ json: memory[key] }), item: { json: memory[key] } }),
       Date,
     });
   }
   const expression = (source, json) => source.startsWith('={{') ?
     evaluate('(' + source.slice(3, -2) + ')', json) : source;
   while (name) {
-    assert.ok(++steps < 40, 'acyclic execution');
+    assert.ok(++steps < 100, 'bounded execution');
     const node = flow.nodes.find(n => n.name === name);
     let branch = 0;
     if (node.type.endsWith('.code')) {
@@ -34,7 +35,13 @@ function simulate(trigger, body, options = {}) {
         .replaceAll('https://API-DO-APLICATIVO.example', 'https://backend.test')
         .replaceAll('https://SUA-EVOLUTION.example', 'https://evolution.test')
         .replace("model: 'CONFIGURE_MODEL'", "model: 'model-test'");
-      value = evaluate('(function(){' + code + '\n})()', value)[0].json;
+      const outputs = evaluate('(function(){' + code + '\n})()', value);
+      if (name === 'Preparar partes') queue = outputs.map(o => o.json);
+      value = outputs[0].json;
+    } else if (node.type.endsWith('.splitInBatches')) {
+      if (queue.length) { value = queue.shift(); branch = 1; } else { branch = 0; }
+    } else if (node.type.endsWith('.wait')) {
+      assert.equal(node.parameters.amount, 2);
     } else if (node.type.endsWith('.if')) {
       branch = expression(node.parameters.conditions.conditions[0].leftValue, value) ? 0 : 1;
     } else if (node.type.endsWith('.httpRequest')) {
@@ -44,12 +51,14 @@ function simulate(trigger, body, options = {}) {
       switch (name) {
         case 'Consultar servidor do aplicativo': value = options.ignore ? { action: 'ignore' } : job; break;
         case 'Consultar IA': value = { choices: [{ message: { content: JSON.stringify({reply:'Como foi seu almoço?',record:null}) }, finish_reason: 'stop' }] }; break;
-        case 'Autorizar e reservar envio': value = options.block ? { approved: false } : {
+        case 'Autorizar e reservar envio': texts = options.parts ?? [payload.candidate]; value = options.block ? { approved: false } : {
           ...event, approved: true, instance: 'nutri', text: payload.candidate,
+          parts: texts.map((_,index)=>({dispatchId:'dispatch-demo-0001',index})),
           dispatchId: 'dispatch-demo-0001', expiresAt: new Date(Date.now() + 30000).toISOString(),
         }; break;
+        case 'Revalidar parte': value = options.cancelAfterFirst && payload.index > 0 ? {approved:false} : {approved:true,partId:'part-demo-'+payload.index,number:event.phone,instance:'nutri',text:texts[payload.index]}; break;
         case 'Enviar pela Evolution': value = options.timeout ? { error: 'timeout' } : { key: { id: 'evolution-out-1' } }; break;
-        case 'Salvar resultado no servidor': value = { ok: true }; break;
+        case 'Salvar resultado no servidor': value = { continue: payload.status === 'accepted' }; break;
         default: throw new Error(name);
       }
     }
@@ -79,7 +88,7 @@ test('exported registration branch sends a generic welcome without invoking AI',
 test('exported conversation branch consults AI then reserves and sends exactly once', () => {
   const calls = simulate('Mensagem da Evolution', message('Bom dia'));
   assert.deepEqual(calls.map(c => c.name), ['Consultar servidor do aplicativo', 'Consultar IA',
-    'Autorizar e reservar envio', 'Enviar pela Evolution', 'Salvar resultado no servidor']);
+    'Autorizar e reservar envio', 'Revalidar parte', 'Enviar pela Evolution', 'Salvar resultado no servidor']);
   assert.equal(calls.find(c => c.name === 'Consultar IA').payload.model, 'model-test');
   assert.equal(calls.find(c => c.name === 'Enviar pela Evolution').payload.text, 'Como foi seu almoço?');
   assert.equal(calls.at(-1).payload.status, 'accepted');
@@ -102,4 +111,13 @@ test('timeout is saved as uncertain, without retrying the WhatsApp call', () => 
   const calls = simulate('Mensagem da Evolution', message('oi'), { timeout: true });
   assert.equal(calls.filter(c => c.name === 'Enviar pela Evolution').length, 1);
   assert.equal(calls.at(-1).payload.status, 'uncertain');
+});
+
+
+test('multipart loop sends parts in order and rechecks consent before each one', () => {
+  const calls=simulate('Mensagem da Evolution',message('Oi'),{parts:['Primeira parte','Segunda parte']});
+  assert.deepEqual(calls.filter(c=>c.name==='Enviar pela Evolution').map(c=>c.payload.text),['Primeira parte','Segunda parte']);
+  assert.equal(calls.filter(c=>c.name==='Revalidar parte').length,2);
+  const cancelled=simulate('Mensagem da Evolution',message('Oi'),{parts:['Primeira','Segunda'],cancelAfterFirst:true});
+  assert.equal(cancelled.filter(c=>c.name==='Enviar pela Evolution').length,1);
 });

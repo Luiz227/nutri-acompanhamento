@@ -37,7 +37,7 @@
         "httpMethod": "POST",
         "path": "nutri-evolution-inbound",
         "authentication": "headerAuth",
-        "responseMode": "lastNode",
+        "responseMode": "onReceived",
         "options": {}
       },
       "webhookId": "nutri-evolution-inbound",
@@ -134,14 +134,14 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{ $(\"Configurar conexões\").first().json.config.backendBaseUrl + \"/v1/nutri/events/ingest\" }}",
+        "url": "={{ $(\"Configurar conexões\").first().json.config.backendBaseUrl + \"/v1/nutri/events/collect\" }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({event: Object.fromEntries(Object.entries($(\"Configurar conexões\").first().json).filter(([key]) => key !== \"config\"))}) }}",
         "options": {
-          "timeout": 30000
+          "timeout": 60000
         }
       },
       "credentials": {
@@ -162,7 +162,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const $json = $input.first().json;\nfunction routeJob(job, event) {\r\n  if (!job || !['ignore', 'welcome', 'reply', 'assistant'].includes(job.action)) {\r\n    throw new Error('Resposta inesperada do servidor');\r\n  }\r\n  if (job.action === 'ignore') return { action: 'ignore' };\r\n  if (job.eventId !== event.eventId && event.eventId !== undefined) throw new Error('Evento divergente');\r\n  if (!/^[\\w:-]{1,120}$/.test(job.userId ?? '') || !/^55\\d{10,11}$/.test(job.phone ?? '')) {\r\n    throw new Error('Identidade não autorizada pelo servidor');\r\n  }\r\n  if (event.phone && job.phone !== event.phone) throw new Error('Número divergente');\r\n  if (['registration', 'reminder'].includes(event.kind) && job.userId !== event.userId) throw new Error('Usuário divergente');\r\n  if (event.command === 'stop') {\r\n    if (job.optOutPersisted !== true || job.consentActive !== false || job.action !== 'reply') {\r\n      throw new Error('O servidor deve gravar o cancelamento antes da confirmação');\r\n    }\r\n    return { ...job, candidate: 'As mensagens de acompanhamento foram interrompidas. Você pode gerenciar sua autorização no aplicativo.' };\r\n  }\r\n  if (job.consentActive !== true) throw new Error('Contato sem autorização ativa');\r\n  if (job.action === 'welcome') {\r\n    return { ...job, candidate: 'Olá! Sou a assistente virtual de acompanhamento nutricional do aplicativo. Para vincular esta conversa com segurança, envie o código exibido no aplicativo. Se não foi você quem solicitou, envie SAIR. Nenhuma informação de saúde será compartilhada antes da confirmação.' };\r\n  }\r\n  if (job.verified !== true) throw new Error('Número ainda não verificado');\r\n  if (job.action === 'reply') {\r\n    if (typeof job.text !== 'string' || !job.text.trim() || job.text.length > 1800) {\r\n      throw new Error('Resposta do servidor inválida');\r\n    }\r\n    return { ...job, candidate: job.text };\r\n  }\r\n  if (typeof job.message !== 'string' || !job.message.trim() || job.message.length > 4000) {\r\n    throw new Error('Mensagem inválida para a IA');\r\n  }\r\n  return job;\r\n}\nconst event = $(\"Configurar conexões\").first().json; return [{json: routeJob($json, event)}];"
+        "jsCode": "const $json = $input.first().json;\nfunction routeJob(job, event) {\r\n  if (!job || !['ignore', 'welcome', 'reply', 'assistant'].includes(job.action)) {\r\n    throw new Error('Resposta inesperada do servidor');\r\n  }\r\n  if (job.action === 'ignore') return { action: 'ignore' };\r\n  if (job.eventId !== event.eventId && event.eventId !== undefined) throw new Error('Evento divergente');\r\n  if (!/^[\\w:-]{1,120}$/.test(job.userId ?? '') || !/^55\\d{10,11}$/.test(job.phone ?? '')) {\r\n    throw new Error('Identidade não autorizada pelo servidor');\r\n  }\r\n  if (event.phone && job.phone !== event.phone) throw new Error('Número divergente');\r\n  if (['registration', 'reminder'].includes(event.kind) && job.userId !== event.userId) throw new Error('Usuário divergente');\r\n  if (event.command === 'stop') {\r\n    if (job.optOutPersisted !== true || job.consentActive !== false || job.action !== 'reply') {\r\n      throw new Error('O servidor deve gravar o cancelamento antes da confirmação');\r\n    }\r\n    return { ...job, candidate: 'As mensagens de acompanhamento foram interrompidas. Você pode gerenciar sua autorização no aplicativo.' };\r\n  }\r\n  if (job.consentActive !== true) throw new Error('Contato sem autorização ativa');\r\n  if (job.action === 'welcome') {\r\n    return { ...job, candidate: 'Olá! Sou a assistente virtual de acompanhamento nutricional do aplicativo. Para vincular esta conversa com segurança, envie o código exibido no aplicativo. Se não foi você quem solicitou, envie SAIR. Nenhuma informação de saúde será compartilhada antes da confirmação.' };\r\n  }\r\n  if (job.verified !== true) throw new Error('Número ainda não verificado');\r\n  if (job.action === 'reply') {\r\n    if (typeof job.text !== 'string' || !job.text.trim() || job.text.length > 1800) {\r\n      throw new Error('Resposta do servidor inválida');\r\n    }\r\n    return { ...job, candidate: job.text };\r\n  }\r\n  if (typeof job.message !== 'string' || !job.message.trim() || job.message.length > 16000) {\r\n    throw new Error('Mensagem inválida para a IA');\r\n  }\r\n  return job;\r\n}\nconst event = $(\"Configurar conexões\").first().json; return [{json: routeJob($json, event)}];"
       }
     },
     {
@@ -363,7 +363,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const $json = $input.first().json;\nfunction validateDispatch(dispatch, job, config) {\r\n  if (dispatch?.approved !== true || dispatch.eventId !== job.eventId ||\r\n      dispatch.userId !== job.userId || dispatch.phone !== job.phone ||\r\n      dispatch.instance !== config.instance || typeof dispatch.dispatchId !== 'string' ||\r\n      !/^[\\w:-]{8,160}$/.test(dispatch.dispatchId) ||\r\n      typeof dispatch.text !== 'string' || !dispatch.text.trim() || dispatch.text.length > 1800 ||\r\n      !Number.isFinite(Date.parse(dispatch.expiresAt)) || Date.parse(dispatch.expiresAt) <= Date.now()) {\r\n    throw new Error('Envio não autorizado ou expirado');\r\n  }\r\n  return { dispatchId: dispatch.dispatchId, eventId: dispatch.eventId,\r\n    number: dispatch.phone, text: dispatch.text, instance: dispatch.instance };\r\n}\n\nreturn [{json: validateDispatch($json, $('Aplicar autorização').first().json,\n  $('Configurar conexões').first().json.config)}];"
+        "jsCode": "const $json = $input.first().json;\nfunction validateDispatch(dispatch, job, config) {\r\n  if (dispatch?.approved !== true || dispatch.eventId !== job.eventId ||\r\n      dispatch.userId !== job.userId || dispatch.phone !== job.phone ||\r\n      dispatch.instance !== config.instance || typeof dispatch.dispatchId !== 'string' ||\r\n      !/^[\\w:-]{8,160}$/.test(dispatch.dispatchId) ||\r\n      typeof dispatch.text !== 'string' || !dispatch.text.trim() || dispatch.text.length > 1800 ||\r\n      !Number.isFinite(Date.parse(dispatch.expiresAt)) || Date.parse(dispatch.expiresAt) <= Date.now()) {\r\n    throw new Error('Envio não autorizado ou expirado');\r\n  }\r\n  return { dispatchId: dispatch.dispatchId, eventId: dispatch.eventId,\r\n    number: dispatch.phone, text: dispatch.text, instance: dispatch.instance, parts: dispatch.parts };\r\n}\n\nreturn [{json: validateDispatch($json, $('Aplicar autorização').first().json,\n  $('Configurar conexões').first().json.config)}];"
       }
     },
     {
@@ -372,7 +372,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3180,
+        4050,
         -120
       ],
       "parameters": {
@@ -401,12 +401,12 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3400,
+        4260,
         -120
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const $json = $input.first().json;\nfunction deliveryReceipt(response, dispatchId) {\r\n  const messageId = response?.key?.id;\r\n  return { dispatchId, status: typeof messageId === 'string' && messageId ? 'accepted' : 'uncertain',\r\n    providerMessageId: typeof messageId === 'string' ? messageId : null };\r\n}\nreturn [{json: deliveryReceipt($json, $(\"Validar destinatário\").first().json.dispatchId)}];"
+        "jsCode": "const response = $input.first().json;\nconst part = $('Revalidar parte').item.json;\nreturn [{json: {partId: part.partId, status: typeof response?.key?.id === 'string' && response.key.id ? 'accepted' : 'uncertain', providerMessageId: response?.key?.id ?? null}, pairedItem: {item: 0}}];"
       }
     },
     {
@@ -415,12 +415,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3620,
+        4480,
         -120
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{ $(\"Configurar conexões\").first().json.config.backendBaseUrl + \"/v1/nutri/dispatches/result\" }}",
+        "url": "={{ $(\"Configurar conexões\").first().json.config.backendBaseUrl + \"/v1/nutri/dispatches/part-result\" }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -465,6 +465,146 @@
         "width": 570,
         "height": 360
       }
+    },
+    {
+      "id": "preparar-partes",
+      "name": "Preparar partes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3150,
+        -120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const $json = $input.first().json;\n\nconst parts = $json.parts;\nif (!Array.isArray(parts) || !parts.length || parts.length > 10) throw new Error('Atualize a API para habilitar o envio em partes.');\nreturn parts.map(part => ({json: part, pairedItem: {item: 0}}));"
+      }
+    },
+    {
+      "id": "enviar-uma-parte-por-vez",
+      "name": "Enviar uma parte por vez",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3380,
+        -120
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "revalidar-parte",
+      "name": "Revalidar parte",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        -120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $(\"Configurar conexões\").first().json.config.backendBaseUrl + \"/v1/nutri/dispatches/part\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({dispatchId: $json.dispatchId, index: $json.index}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Nutri - API do aplicativo"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "parte-autorizada-",
+      "name": "Parte autorizada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3820,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Parte autorizada?",
+              "leftValue": "={{ $json.approved === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "continuar-partes-",
+      "name": "Continuar partes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4700,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Continuar partes?",
+              "leftValue": "={{ $json.continue === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "pausa-entre-partes",
+      "name": "Pausa entre partes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4900,
+        120
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "webhookId": "nutri-pausa-partes"
     }
   ],
   "connections": {
@@ -665,7 +805,65 @@
       "main": [
         [
           {
+            "node": "Preparar partes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar partes": {
+      "main": [
+        [
+          {
+            "node": "Enviar uma parte por vez",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar uma parte por vez": {
+      "main": [
+        [
+          {
+            "node": "Concluir evento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Revalidar parte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revalidar parte": {
+      "main": [
+        [
+          {
+            "node": "Parte autorizada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parte autorizada?": {
+      "main": [
+        [
+          {
             "node": "Enviar pela Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Concluir evento",
             "type": "main",
             "index": 0
           }
@@ -698,7 +896,36 @@
       "main": [
         [
           {
+            "node": "Continuar partes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continuar partes?": {
+      "main": [
+        [
+          {
+            "node": "Pausa entre partes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Concluir evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pausa entre partes": {
+      "main": [
+        [
+          {
+            "node": "Enviar uma parte por vez",
             "type": "main",
             "index": 0
           }

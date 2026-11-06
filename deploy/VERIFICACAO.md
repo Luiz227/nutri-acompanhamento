@@ -29,3 +29,7 @@ Um backup privado deles é necessário para futuras atualizações do APK.
 ## Atualização v0.3.0-teste.1
 
 32 testes de servidor e 21 testes do workflow aprovados; 6 testes Flutter específicos aprovados. Análise Flutter sem problemas. Novos testes cobrem autorização e cancelamento de lembretes, idempotência de horários, nome persistente, proporção dos nutrientes, total parcial e categoria explícita de refeição importada no app. Não houve envio real de lembrete nem chamada paga à IA nesta verificação. O operador deve atualizar API, workflow e APK e validar no ambiente real.
+
+## Agrupador e quebrador de mensagens
+
+38 testes de servidor e 22 testes de workflow aprovados. Cobrem união de mensagens concorrentes, isolamento entre pacientes, SAIR durante a espera, partes ordenadas e não repetidas, interrupção após falha e simulação do loop com duas partes. Não foi executado envio real no n8n/Evolution; o teste de ponta a ponta depende da implantação pelo operador.

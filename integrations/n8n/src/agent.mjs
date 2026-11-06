@@ -62,7 +62,7 @@ export function routeJob(job, event) {
     }
     return { ...job, candidate: job.text };
   }
-  if (typeof job.message !== 'string' || !job.message.trim() || job.message.length > 4000) {
+  if (typeof job.message !== 'string' || !job.message.trim() || job.message.length > 16000) {
     throw new Error('Mensagem inválida para a IA');
   }
   return job;
@@ -120,7 +120,7 @@ export function validateDispatch(dispatch, job, config) {
     throw new Error('Envio não autorizado ou expirado');
   }
   return { dispatchId: dispatch.dispatchId, eventId: dispatch.eventId,
-    number: dispatch.phone, text: dispatch.text, instance: dispatch.instance };
+    number: dispatch.phone, text: dispatch.text, instance: dispatch.instance, parts: dispatch.parts };
 }
 
 export function deliveryReceipt(response, dispatchId) {

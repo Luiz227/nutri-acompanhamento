@@ -54,7 +54,7 @@ if (!/^[\\p{L}\\p{M}\\p{N}_-]{1,100}$/u.test(config.instance)) throw new Error('
 if ($json.kind === 'incoming' && $json.instance !== config.instance) throw new Error('Instância não autorizada');
 return [{json: {...$json, config}}];`, 480, 130);
 condition('Evento aceito?', '={{ $json.kind !== "ignored" }}', 700, 130);
-http('Consultar servidor do aplicativo', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/events/ingest" }}',
+http('Consultar servidor do aplicativo', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/events/collect" }}',
   '={{ JSON.stringify({event: Object.fromEntries(Object.entries($("Configurar conexões").first().json).filter(([key]) => key !== "config"))}) }}',
   'Nutri - API do aplicativo', 940, 40);
 code('Aplicar autorização', [agent.routeJob],
@@ -92,6 +92,27 @@ http('Salvar resultado no servidor', '={{ $("Configurar conexões").first().json
 code('Concluir evento', [], 'return [{json: {ok: true}}];', 3860, 160);
 add('Leia antes de ativar', 'stickyNote', 1, { content: `## Nutri + Evolution API v2\n**Importação desativada.**\n1. Leia README.md e deploy/EASYPANEL.md na raiz.\n2. Publique o servidor server/app.py e configure seu volume.\n3. Configure credenciais e URLs nos nós.\n4. Escolha o modelo de IA e habilite enabled no nó Configurar conexões.\n5. Teste com seu próprio número antes de publicar.\n\nO servidor usa respostas fixas por padrão; AI_RESPONSES_ENABLED=true libera conversa geral. A IA propõe refeições, água, peso e observações. O servidor salva somente após CONFIRMAR do paciente e calcula nutrientes apenas para alimentos identificados na TACO. Não há prescrição. SAIR é persistido antes da confirmação.`, width: 570, height: 360 }, 0, -450);
 
+// Collect bursts in SQLite; no global workflow static data or cross-patient buffers.
+nodes.find(n => n.name === 'Consultar servidor do aplicativo').parameters.options.timeout = 60000;
+nodes.find(n => n.name === 'Mensagem da Evolution').parameters.responseMode = 'onReceived';
+code('Preparar partes', [], `const parts = $json.parts;
+if (!Array.isArray(parts) || !parts.length || parts.length > 10) throw new Error('Atualize a API para habilitar o envio em partes.');
+return parts.map(part => ({json: part, pairedItem: {item: 0}}));`, 3150, -120);
+add('Enviar uma parte por vez', 'splitInBatches', 3, {batchSize: 1, options: {}}, 3380, -120);
+http('Revalidar parte', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/part" }}',
+  '={{ JSON.stringify({dispatchId: $json.dispatchId, index: $json.index}) }}', 'Nutri - API do aplicativo', 3600, -120);
+condition('Parte autorizada?', '={{ $json.approved === true }}', 3820, -120);
+const classify = nodes.find(n => n.name === 'Classificar resultado do envio');
+classify.parameters.jsCode = `const response = $input.first().json;
+const part = $('Revalidar parte').item.json;
+return [{json: {partId: part.partId, status: typeof response?.key?.id === 'string' && response.key.id ? 'accepted' : 'uncertain', providerMessageId: response?.key?.id ?? null}, pairedItem: {item: 0}}];`;
+const receiptNode = nodes.find(n => n.name === 'Salvar resultado no servidor');
+receiptNode.parameters.url = '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/part-result" }}';
+condition('Continuar partes?', '={{ $json.continue === true }}', 4700, -120);
+add('Pausa entre partes', 'wait', 1.1, {resume: 'timeInterval', amount: 2, unit: 'seconds'}, 4900, 120, {webhookId: 'nutri-pausa-partes'});
+nodes.find(n => n.name === 'Enviar pela Evolution').position = [4050, -120];
+classify.position = [4260, -120]; receiptNode.position = [4480, -120];
+
 link('Cadastro do aplicativo', 'Validar cadastro'); link('Mensagem da Evolution', 'Filtrar mensagem');
 link('Validar cadastro', 'Configurar conexões'); link('Filtrar mensagem', 'Configurar conexões');
 link('Configurar conexões', 'Evento aceito?'); link('Evento aceito?', 'Consultar servidor do aplicativo');
@@ -101,8 +122,17 @@ link('Usar IA?', 'Preparar contexto da IA'); link('Usar IA?', 'Autorizar e reser
 link('Preparar contexto da IA', 'Consultar IA'); link('Consultar IA', 'Ler resposta da IA');
 link('Ler resposta da IA', 'Autorizar e reservar envio'); link('Autorizar e reservar envio', 'Envio liberado?');
 link('Envio liberado?', 'Validar destinatário'); link('Envio liberado?', 'Concluir evento', 1);
-link('Validar destinatário', 'Enviar pela Evolution'); link('Enviar pela Evolution', 'Classificar resultado do envio');
-link('Classificar resultado do envio', 'Salvar resultado no servidor'); link('Salvar resultado no servidor', 'Concluir evento');
+link('Validar destinatário', 'Preparar partes');
+link('Preparar partes', 'Enviar uma parte por vez');
+link('Enviar uma parte por vez', 'Concluir evento', 0);
+link('Enviar uma parte por vez', 'Revalidar parte', 1);
+link('Revalidar parte', 'Parte autorizada?');
+link('Parte autorizada?', 'Enviar pela Evolution');
+link('Parte autorizada?', 'Concluir evento', 1); link('Enviar pela Evolution', 'Classificar resultado do envio');
+link('Classificar resultado do envio', 'Salvar resultado no servidor'); link('Salvar resultado no servidor', 'Continuar partes?');
+link('Continuar partes?', 'Pausa entre partes');
+link('Continuar partes?', 'Concluir evento', 1);
+link('Pausa entre partes', 'Enviar uma parte por vez');
 
 const workflow = { name: 'Nutri - Aplicativo + Evolution API + IA', nodes, connections, active: false,
   settings: { executionOrder: 'v1', timezone: 'America/Sao_Paulo',

@@ -73,3 +73,19 @@ manual; esta atualização precisa do APK novo e do servidor/n8n atualizados.
 - O fluxo é entregue inativo. Desative a versão antiga antes de publicar a nova para evitar conflito de webhooks. Confirme cada credencial selecionada. N8N_REGISTRATION_WEBHOOK, EVOLUTION_INSTANCE e os segredos existentes permanecem.
 
 Teste com seu próprio número: nome → NÃO (nenhum lembrete) → ATIVAR LEMBRETES → SIM; refeição com variedade, peso e categoria → conferir nutrientes → CONFIRMAR → abrir o APK novo e conferir a categoria. Para testar o agendador, ALTERAR LEMBRETES e escolher um horário alguns minutos à frente, autorizar e depois cancelar. Não publique chaves nem dados das execuções.
+
+
+## Agrupar mensagens e dividir respostas (API v4)
+
+Atualize a nutri-api pelo Git e importe o fluxo atualizado. O APK v0.3 continua compatível; esta mudança não exige outro APK.
+
+- O endpoint interno `/v1/nutri/events/collect` acumula mensagens comuns de um paciente verificado por 8 segundos após a última chegada. Cada mensagem seguinte reinicia essa janela. Execuções anteriores terminam sem resposta; somente a última processa o texto unido em ordem de chegada.
+- O buffer é persistente no SQLite e separado por paciente. Não usa dados estáticos globais do n8n nem exige Redis. Não há garantia de recuperação automática de mensagens interrompidas por reinício durante a espera; uma nova mensagem permite retomar pendências. Duplicatas do mesmo evento não geram outra resposta.
+- Boas-vindas, código de vínculo, perguntas iniciais, confirmações e comandos são processados sem a espera. SAIR cancela as mensagens ainda acumuladas antes da IA. Perguntas de nome/autorização continuam uma por vez.
+- Até 32 mensagens / 16 mil caracteres são agrupados. Se a janela exceder o limite, a mensagem excedente é processada separadamente, sem truncar ou descartar as anteriores. Cada mensagem individual mantém o limite de 4 mil caracteres.
+- A divisão usa parágrafos, linhas e espaços, com até 700 caracteres por parte. O texto completo mantém seu limite atual de 1800 caracteres. O nó Pausa entre partes espera 2 segundos antes de continuar o loop.
+- O servidor prepara as partes autorizadas; o n8n revalida cada uma, envia uma por vez e salva o aceite ou a incerteza. Não há reenvio automático de partes com resultado incerto. Uma falha interrompe as demais partes. SAIR bloqueia partes ainda não iniciadas; uma requisição já em trânsito pode chegar.
+- O webhook Evolution responde imediatamente; a execução pode continuar por alguns segundos. O request de coleta tem timeout de 60 segundos. O serviço deve operar com uma réplica, como a configuração SQLite atual.
+- Textos do buffer e das partes são removidos pela limpeza após 30 dias. Evite exportar execuções com cabeçalhos secretos. As credenciais são referenciadas, nunca embutidas no JSON entregue.
+
+Teste de ponta a ponta: envie “No café da manhã comi arroz cozido”, em seguida “50 gramas” em menos de oito segundos. Deve haver uma única consulta à IA com as duas mensagens. Teste uma resposta nutricional longa e observe as partes na ordem, separadas por dois segundos. PARAR LEMBRETES cancela apenas lembretes; SAIR encerra o acompanhamento.

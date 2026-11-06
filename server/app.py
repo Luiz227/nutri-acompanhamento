@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlsplit
 from records import Records
 from coaching import Coaching
+from messaging import Messaging
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
 
@@ -64,6 +65,7 @@ class Store:
         self.db.commit()
         self.records = Records(self.db)
         self.coaching = Coaching(self.db)
+        self.messaging = Messaging(self)
 
     def enroll(self, body):
         phone = re.sub(r'[\s()+.-]', '', str(body.get('phone', '')))
@@ -184,7 +186,7 @@ class Store:
             action, text, optout = 'welcome', '', False
         elif event.get('kind') == 'incoming' and event.get('instance') == instance:
             phone, text = event.get('phone', ''), str(event.get('text', '')).strip()
-            if not re.fullmatch(r'55\d{10,11}', phone) or len(text) > 4000:
+            if not re.fullmatch(r'55\d{10,11}', phone) or len(text) > 16000:
                 return {'action': 'ignore'}
             stop = text.upper() in ('SAIR', 'PARAR', 'CANCELAR', 'STOP')
             if stop:
@@ -297,7 +299,8 @@ class Store:
             self.db.execute('INSERT INTO history(patient_id,role,content,created) VALUES(?,?,?,?)', (p['id'], 'assistant', text, time.time()))
             expires = datetime.fromtimestamp(time.time() + 30, timezone.utc).isoformat()
             return {'approved': True, 'dispatchId': dispatch_id, 'eventId': event['id'],
-                    'userId': p['id'], 'phone': p['phone'], 'instance': instance, 'text': text, 'expiresAt': expires}
+                    'userId': p['id'], 'phone': p['phone'], 'instance': instance, 'text': text, 'expiresAt': expires,
+                    'parts': self.messaging.prepare(dispatch_id, text)}
 
     def result(self, body):
         if body.get('status') not in ('accepted', 'uncertain'):
@@ -339,6 +342,8 @@ class Store:
     def cleanup(self):
         with self.lock, self.db:
             self.db.execute('DELETE FROM history WHERE created<?', (time.time() - 30 * 86400,))
+            self.db.execute('DELETE FROM inbox WHERE created<?', (time.time() - 30 * 86400,))
+            self.db.execute('DELETE FROM dispatch_parts WHERE dispatch_id IN (SELECT id FROM dispatches WHERE created<?)', (time.time() - 30 * 86400,))
             self.db.execute('UPDATE patients SET code_hash=NULL WHERE code_until<?', (time.time(),))
 
 
@@ -373,7 +378,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 3, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 4, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}
@@ -390,7 +395,13 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
                         raise Problem(401, 'Credencial de serviço inválida.')
                     if self.command != 'POST':
                         raise Problem(405, 'Método não permitido.')
-                    if path == '/v1/nutri/events/ingest':
+                    if path == '/v1/nutri/events/collect':
+                        data = store.messaging.collect(body.get('event', {}), instance)
+                    elif path == '/v1/nutri/dispatches/part':
+                        data = store.messaging.authorize(body, instance)
+                    elif path == '/v1/nutri/dispatches/part-result':
+                        data = store.messaging.receipt(body)
+                    elif path == '/v1/nutri/events/ingest':
                         data = store.ingest(body.get('event', {}), instance)
                     elif path == '/v1/nutri/dispatches/reserve':
                         data = store.reserve(body, instance)
