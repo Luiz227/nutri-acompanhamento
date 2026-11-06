@@ -6,6 +6,9 @@ import 'package:http/testing.dart';
 import 'package:opennutritracker/core/utils/hive_db_provider.dart';
 import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/data/repository/water_intake_repository.dart';
+import 'package:opennutritracker/core/data/repository/intake_repository.dart';
+import 'package:opennutritracker/core/domain/entity/intake_entity.dart';
+import 'package:opennutritracker/core/domain/entity/intake_type_entity.dart';
 import 'package:opennutritracker/core/domain/entity/water_intake_entity.dart';
 import 'package:opennutritracker/features/whatsapp/bridge_session.dart';
 import 'package:opennutritracker/features/whatsapp/nutri_bridge_client.dart';
@@ -14,6 +17,14 @@ class _Profiles implements HiveDBProvider {
   String id = 'one';
   @override
   String get activeProfileId => id;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _Intakes implements IntakeRepository {
+  final entries = <IntakeEntity>[];
+  @override
+  Future<void> addIntake(IntakeEntity entry) async => entries.add(entry);
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
@@ -40,6 +51,66 @@ void main() {
     locator.registerSingleton<HiveDBProvider>(profiles);
   });
   tearDown(() async => locator.reset());
+
+  test(
+    'breakfast reported at night imports into breakfast with TACO nutrients once',
+    () async {
+      final intakes = _Intakes();
+      locator.registerSingleton<IntakeRepository>(intakes);
+      await const FlutterSecureStorage().write(
+        key: 'nutri-bridge-v1:one',
+        value: jsonEncode({
+          'token': 'test-token',
+          'url': 'https://nutri.example',
+          'cursor': 0,
+          'records': [],
+        }),
+      );
+      final session = BridgeSession(
+        'one',
+        onError: (error, stack) => fail('$error\n$stack'),
+        createClient: (url) => NutriBridgeClient(
+          url,
+          client: MockClient((request) async {
+            if (request.url.path == '/api/v1/me') {
+              return http.Response(
+                '{"verified":true,"consentActive":true}',
+                200,
+              );
+            }
+            return http.Response(
+              jsonEncode({
+                'records': request.url.queryParameters['after'] == '0'
+                    ? [
+                        {
+                          'id': 'breakfast-1',
+                          'seq': 1,
+                          'kind': 'meal',
+                          'text': 'Arroz, tipo 1, cozido',
+                          'quantity': 50,
+                          'unit': 'g',
+                          'foodCode': 'taco:3',
+                          'mealType': 'breakfast',
+                          'occurredAt': '2026-11-06T23:00:00Z',
+                        },
+                      ]
+                    : [],
+                'nextCursor': 1,
+                'hasMore': false,
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }),
+        ),
+      );
+      await session.synchronize();
+      await session.synchronize();
+      expect(intakes.entries, hasLength(1));
+      expect(intakes.entries.single.type, IntakeTypeEntity.breakfast);
+      expect(intakes.entries.single.totalKcal, closeTo(64.129243, .01));
+    },
+  );
 
   test(
     'offline signup is persisted without exposing server configuration to the user',

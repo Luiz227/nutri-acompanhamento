@@ -49,8 +49,7 @@ pacientes o administrador precisa deixar a infraestrutura funcionando.
 - Até 200 anotações recentes ficam no cache seguro do app; registros confirmados
   permanecem no servidor. A sincronização percorre páginas e importa registros
   nativos com IDs estáveis, evitando duplicação.
-- O horário da refeição define a categoria local inicial. Edição remota de
-  registros já confirmados e lembretes diários espontâneos não fazem parte desta versão.
+- No APK v0.3.0, a categoria informada pelo paciente (café, almoço, jantar ou lanche) tem prioridade sobre o horário de envio. Registros antigos sem categoria mantêm a regra por horário. Edição remota de registros já confirmados não faz parte desta versão.
 - Há confirmação por mensagem, vínculo por código, isolamento por paciente,
   cancelamento SAIR, validação de unidades e expiração de rascunhos em 30 minutos.
   Esses controles não são uma validação clínica do modelo.
@@ -58,3 +57,19 @@ pacientes o administrador precisa deixar a infraestrutura funcionando.
 Confirme o endpoint `/healthz`, os logs da implantação e um ciclo completo com
 seu próprio número antes de usar dados reais. O APK antigo continua tendo o fluxo
 manual; esta atualização precisa do APK novo e do servidor/n8n atualizados.
+
+
+## Versão 0.3: conversa, memória e lembretes
+
+- Após verificar o número, o servidor pergunta como a pessoa prefere ser chamada (PULAR é permitido). Nome e preferências ficam no SQLite por paciente, sem depender só do histórico do modelo.
+- Em seguida solicita SIM ou NÃO para lembretes às 09:00, 12:00, 15:00 e 18:00 de Brasília. Silêncio ou resposta ambígua não autoriza envio. Não há meta hídrica prescrita.
+- ALTERAR LEMBRETES pausa os envios e permite até seis horários HH:MM; após informar horários, é necessário autorizar novamente. PARAR LEMBRETES cancela só esses envios; SAIR revoga todo o acompanhamento. ATIVAR LEMBRETES pede consentimento novamente.
+- O agendador roda na API, inclusive com o app fechado, reutilizando o webhook autenticado de cadastro e o workflow do n8n. Não é necessário outro cron no n8n. A API e o volume precisam ficar ativos. Cada horário tem chave persistente; não são recuperados horários perdidos durante indisponibilidade. Entrega de mensagens depende dos serviços externos e não é garantida.
+- Antes de cada despacho, são revalidados consentimento, vínculo e validade do lembrete. Uma chamada já em trânsito pode chegar após cancelamento; não há reenvio automático de despacho com resultado incerto.
+- O resumo no WhatsApp mostra kcal, proteínas, carboidratos, gorduras, fibras e sódio por item e total. Valores ausentes na TACO continuam como não informados. Uma refeição com alimento desconhecido tem apenas subtotal identificado, claramente sinalizado.
+- A busca usa a TACO local, nomes equivalentes revisados e contexto recente. Não consulta a internet nem estima nutrientes de alimento ausente. Marca/rótulo e variedade podem ser solicitados; não há substituição automática entre comum/integral ou com/sem gordura.
+- Os registros confirmados mais recentes e as últimas mensagens dão continuidade à conversa. O histórico de conversa tem retenção de 30 dias; nome/preferências e registros persistem no volume, até política de exclusão do operador. Não é uma memória ilimitada.
+- Atualize a API (healthz apiVersion 3), importe o novo fluxo e selecione a credencial nativa OpenAI já criada no nó Consultar IA. O novo APK é necessário para a categoria explícita no diário. APIs antigas/n8n antigo não emitem os novos eventos de lembrete corretamente.
+- O fluxo é entregue inativo. Desative a versão antiga antes de publicar a nova para evitar conflito de webhooks. Confirme cada credencial selecionada. N8N_REGISTRATION_WEBHOOK, EVOLUTION_INSTANCE e os segredos existentes permanecem.
+
+Teste com seu próprio número: nome → NÃO (nenhum lembrete) → ATIVAR LEMBRETES → SIM; refeição com variedade, peso e categoria → conferir nutrientes → CONFIRMAR → abrir o APK novo e conferir a categoria. Para testar o agendador, ALTERAR LEMBRETES e escolher um horário alguns minutos à frente, autorizar e depois cancelar. Não publique chaves nem dados das execuções.

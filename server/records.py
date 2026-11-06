@@ -27,6 +27,18 @@ FOOD_ALIASES = {
     'presunto sem capa de gordura': 'Presunto, sem capa de gordura',
 }
 
+MEAL_LABELS = {'breakfast': 'Café da manhã', 'lunch': 'Almoço', 'dinner': 'Jantar', 'snack': 'Lanche'}
+NUTRIENTS = {'energyKcal': 'energy_kcal_100', 'proteinG': 'proteins_100',
+             'carbsG': 'carbohydrates_100', 'fatG': 'fat_100', 'fiberG': 'fiber_100', 'sodiumMg': 'sodium_100'}
+
+
+def nutrition_line(values):
+    labels = {'energyKcal': ('kcal', ''), 'proteinG': ('g', 'proteínas '),
+              'carbsG': ('g', 'carboidratos '), 'fatG': ('g', 'gorduras '),
+              'fiberG': ('g', 'fibras '), 'sodiumMg': ('mg', 'sódio ')}
+    return '; '.join(prefix + (f'{values[key]:.1f}'.replace('.', ',') + ' ' + unit if values.get(key) is not None else 'não informado')
+                     for key, (unit, prefix) in labels.items())
+
 
 def catalogue():
     file = Path(__file__).with_name('taco_4ed.json')
@@ -42,6 +54,10 @@ def validate_record(raw):
     if not isinstance(text, str) or not 1 <= len(text.strip()) <= 600:
         raise ValueError('Descrição obrigatória (até 600 caracteres).')
     result = {'kind': raw['kind'], 'text': text.strip()}
+    if raw['kind'] == 'meal' and raw.get('mealType') is not None:
+        if raw['mealType'] not in MEAL_LABELS:
+            raise ValueError('Informe café da manhã, almoço, jantar ou lanche.')
+        result['mealType'] = raw['mealType']
     if raw['kind'] != 'observation':
         amount, unit = raw.get('quantity'), raw.get('unit')
         if isinstance(amount, bool) or not isinstance(amount, (float, int)) or not math.isfinite(amount) or amount <= 0:
@@ -103,6 +119,9 @@ class Records:
                     food = matches[0]
                     record.update(foodCode=f"taco:{food['id']}", foodName=food['name'],
                                   nutrientsPer100g=food['nutrients'], source='TACO/NEPA/UNICAMP (2011)')
+                    record['nutrition'] = {key: round(food['nutrients'][column] * record['quantity'] / 100, 4)
+                                           if isinstance(food['nutrients'].get(column), (int, float)) else None
+                                           for key, column in NUTRIENTS.items()}
                 else:
                     record['nutritionStatus'] = 'unknown'
         labels = {'meal': 'Refeição', 'water': 'Água', 'weight': 'Peso', 'observation': 'Observação'}
@@ -111,10 +130,19 @@ class Records:
             amount = f" — {record['quantity']:g} {record['unit']}" if 'quantity' in record else ''
             nutrition = ' (Sem cálculo nutricional: alimento não identificado na TACO)' if record.get('nutritionStatus') else ''
             if record.get('foodName'):
-                nutrition = f" (TACO: {record['foodName']})"
+                nutrition = f" (TACO: {record['foodName']})\n   {nutrition_line(record['nutrition'])}."
             date = datetime.fromisoformat(record['occurredAt']).astimezone(timezone(timedelta(hours=-3))).strftime('%d/%m/%Y %H:%M')
-            lines.append(f"{index+1}. {labels[record['kind']]} — {record['text']}{amount} — {date} (Brasília){nutrition}.")
-        message = 'Entendi:\n' + '\n'.join(lines) + '\nAinda não salvei. Para salvar no aplicativo, responda CONFIRMAR. Para descartar, responda CANCELAR REGISTRO.'
+            label = MEAL_LABELS.get(record.get('mealType'), labels[record['kind']])
+            lines.append(f"{index+1}. {label} — {record['text']}{amount} — {date} (Brasília){nutrition}.")
+        meals = [r for r in records if r['kind'] == 'meal']
+        total = ''
+        if meals:
+            known = [r for r in meals if 'nutrition' in r]
+            if known:
+                totals = {key: sum(r['nutrition'][key] for r in known) if all(r['nutrition'][key] is not None for r in known) else None for key in NUTRIENTS}
+                title = 'Total estimado' if len(known) == len(meals) else 'Subtotal dos alimentos identificados (refeição incompleta)'
+                total = '\n' + title + ': ' + nutrition_line(totals) + '. Valores da TACO, sujeitos a variações de marca e preparo.'
+        message = 'Vamos conferir o que você me contou:\n' + '\n'.join(lines) + total + '\nEstá certo? Responda CONFIRMAR para salvar no app ou CANCELAR REGISTRO para descartar. Ainda não salvei.'
         if len(message) > 1800:
             raise ValueError('Divida descrições longas em mais de uma mensagem.')
         self.db.execute("UPDATE records SET status='superseded' WHERE patient_id=? AND status='pending'", (patient_id,))

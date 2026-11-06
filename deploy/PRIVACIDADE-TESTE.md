@@ -42,3 +42,5 @@ de payloads e tokens; o fluxo desativa dados de execução no n8n, sem controlar
 os logs dos outros fornecedores.
 
 Use dados fictícios e seu próprio número na validação inicial.
+
+A versão 0.3 também guarda o nome de preferência, estado das perguntas iniciais, autorização específica, horários e controle de envio de lembretes de água. O paciente pode responder NÃO, PARAR LEMBRETES ou SAIR; o diário confirmado recente e a preferência de nome são enviados ao provedor de IA para continuidade da conversa.

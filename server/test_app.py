@@ -26,7 +26,12 @@ class BridgeTests(unittest.TestCase):
                 'instance': 'nutri', 'text': text}
 
     def verify(self):
-        return self.store.ingest(self.event(self.enrollment['pairingCode']), 'nutri')
+        job = self.store.ingest(self.event(self.enrollment['pairingCode']), 'nutri')
+        if job.get('verified'):
+            # Most tests start after the introductory questions.
+            self.store.db.execute("UPDATE coaching SET stage='done' WHERE patient_id=?", (self.patient['id'],))
+            self.store.db.commit()
+        return job
 
     def test_accented_instance_verifies_and_reserves_with_exact_name(self):
         event = {**self.event(self.enrollment['pairingCode']),

@@ -74,3 +74,7 @@ flutter test --concurrency=1 test/unit_test/nutri_bridge_client_test.dart test/u
 Os testes não substituem a validação do Docker no Easypanel, importação do n8n,
 conexão do WhatsApp e instalação no aparelho real. Esses serviços exigem seus
 endereços e credenciais e não são publicados pelo ato de criar este repositório.
+
+### Atualização 0.3 de teste
+
+Conversa com nome e preferências persistentes, lembretes de água por autorização expressa e resumo nutricional determinístico por porção. APK novo respeita a categoria relatada pelo WhatsApp. Guia: [fluxo e limites](deploy/FLUXO-WHATSAPP.md).

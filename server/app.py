@@ -16,6 +16,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlsplit
 from records import Records
+from coaching import Coaching
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
 
@@ -62,6 +63,7 @@ class Store:
         ''')
         self.db.commit()
         self.records = Records(self.db)
+        self.coaching = Coaching(self.db)
 
     def enroll(self, body):
         phone = re.sub(r'[\s()+.-]', '', str(body.get('phone', '')))
@@ -167,7 +169,14 @@ class Store:
             if not p or event.get('phone') != p['phone'] or (event.get('kind') == 'registration' and event.get('userId') != p['id']):
                 return {'action': 'ignore'}
             return self._job(p, event_id, old['action'], old['text'], bool(old['optout']))
-        if event.get('kind') == 'registration':
+        if event.get('kind') == 'reminder':
+            p = self.db.execute('SELECT * FROM patients WHERE id=? AND phone=? AND consent=1 AND verified=1',
+                                (event.get('userId'), event.get('phone'))).fetchone()
+            text = self.coaching.reminder(event_id, p['id']) if p else None
+            if not text:
+                return {'action': 'ignore'}
+            action, optout = 'reply', False
+        elif event.get('kind') == 'registration':
             p = self.db.execute('SELECT * FROM patients WHERE id=? AND registration_id=?',
                 (event.get('userId'), event_id)).fetchone()
             if not p or p['phone'] != event.get('phone') or not p['consent']:
@@ -196,7 +205,7 @@ class Store:
                     self.db.execute('UPDATE patients SET consent=0, verified=0,code_hash=NULL WHERE phone=? AND id<>?', (phone, p['id']))
                     self.db.execute('UPDATE patients SET verified=1,code_hash=NULL WHERE id=?', (p['id'],))
                     p = self.db.execute('SELECT * FROM patients WHERE id=?', (p['id'],)).fetchone()
-                    action, text, optout = 'reply', 'WhatsApp confirmado! Sou sua assistente virtual. Como posso ajudar você a manter o diário alimentar?', False
+                    action, text, optout = 'reply', self.coaching.start(p['id']), False
                 else:
                     p = self.db.execute('SELECT * FROM patients WHERE phone=? AND verified=1 AND consent=1', (phone,)).fetchone()
                     if not p:
@@ -204,8 +213,11 @@ class Store:
                             self.db.execute('UPDATE patients SET attempts=attempts+1 WHERE phone=? AND verified=0', (phone,))
                         return {'action': 'ignore'}
                     action, optout = 'assistant', False
+                    coaching_reply = self.coaching.handle(p['id'], text) if text.upper() not in ('CONFIRMAR', 'CANCELAR REGISTRO') else None
                     if text.upper() in ('CONFIRMAR', 'CANCELAR REGISTRO'):
                         action, text = 'reply', self.records.confirm(p['id'], text.upper() == 'CONFIRMAR')
+                    elif coaching_reply is not None:
+                        action, text = 'reply', coaching_reply
                     elif re.search(r'\b(rem[eé]dio|medicamento|dose|dosagem|suplemento|prescreva|prescri[cç][aã]o)\b', text, re.I):
                         action, text = 'reply', 'Para dúvidas clínicas, sintomas, medicamentos ou suplementos, procure seu nutricionista ou profissional de saúde. A assistente virtual ajuda somente com o diário alimentar e hábitos gerais.'
                     elif not self.allow_ai:
@@ -222,10 +234,18 @@ class Store:
         if action == 'assistant' and not self.allow_ai:
             action, text = 'reply', PILOT_REPLY
         history = self.db.execute('SELECT role,content FROM history WHERE patient_id=? ORDER BY id DESC LIMIT 8', (p['id'],)).fetchall()
+        context = json.loads(p['context']) if p['verified'] else {}
+        preferences = self.coaching.get(p['id']) if p['verified'] else None
+        if preferences:
+            context.update(displayName=preferences['name'] or '',
+                           waterReminders='Ativados: ' + preferences['hours'] if preferences['reminders'] else 'Desativados')
+        recent = self.db.execute("SELECT payload FROM records WHERE patient_id=? AND status='confirmed' ORDER BY seq DESC LIMIT 12", (p['id'],)).fetchall() if p['verified'] else []
+        if recent:
+            context['recentDiarySummary'] = json.dumps([{k: v for k, v in json.loads(r['payload']).items() if k in ('kind', 'text', 'quantity', 'unit', 'occurredAt', 'mealType')} for r in reversed(recent)], ensure_ascii=False)
         return {'eventId': event_id, 'userId': p['id'], 'phone': p['phone'], 'action': action,
                 'verified': bool(p['verified']), 'consentActive': bool(p['consent']),
                 'optOutPersisted': optout, 'text': text, 'message': text,
-                'context': json.loads(p['context']) if p['verified'] else {},
+                'context': context,
                 'history': [dict(r) for r in reversed(history)] if p['verified'] else [],
                 'catalogueCandidates': self.records.candidates(' '.join(
                     r['content'] for r in reversed(history) if r['role'] == 'user') + ' ' + text) if action == 'assistant' else [],
@@ -243,6 +263,8 @@ class Store:
                 return {'approved': False}
             count = self.db.execute('SELECT count(*) FROM dispatches WHERE patient_id=? AND created>?', (p['id'], time.time() - 3600)).fetchone()[0]
             if count >= 20 and not event['optout']:
+                return {'approved': False}
+            if event['id'].startswith('reminder:') and not self.coaching.reminder(event['id'], p['id']):
                 return {'approved': False}
             if event['optout']:
                 if p['consent']:
@@ -296,6 +318,13 @@ class Store:
             row = self.db.execute("SELECT * FROM notifications WHERE status='pending' AND next_at<=? AND attempts<5 ORDER BY next_at LIMIT 1", (time.time(),)).fetchone()
         if not row:
             return
+        if row['id'].startswith('reminder:'):
+            with self.lock, self.db:
+                data = json.loads(row['body'])
+                patient = self.db.execute('SELECT consent,verified FROM patients WHERE id=?', (data['userId'],)).fetchone()
+                if not patient or not patient['consent'] or not patient['verified'] or not self.coaching.reminder(row['id'], data['userId']):
+                    self.db.execute("UPDATE notifications SET status='cancelled' WHERE id=?", (row['id'],))
+                    return
         try:
             req = Request(webhook, data=row['body'].encode(), method='POST',
                           headers={'Content-Type': 'application/json', 'X-Nutri-App-Secret': secret})
@@ -344,7 +373,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 2, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 3, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}
@@ -411,6 +440,8 @@ if __name__ == '__main__':
         raise SystemExit('Configure o webhook HTTPS do n8n e seu segredo com pelo menos 32 caracteres.')
     def worker():
         while True:
+            with store.lock, store.db:
+                store.coaching.schedule()
             store.notify_once(webhook, secret)
             store.cleanup()
             time.sleep(5)

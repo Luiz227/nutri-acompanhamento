@@ -67,6 +67,28 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(record['foodCode'], 'taco:463')
         self.assertEqual(record['quantity'], 7)
 
+    def test_meal_nutrients_are_scaled_by_grams_and_category_is_preserved(self):
+        draft = self.propose({'kind': 'meal', 'text': 'Arroz, tipo 1, cozido', 'quantity': 50, 'unit': 'g', 'mealType': 'breakfast'})
+        self.assertIn('Café da manhã', draft['text'])
+        self.assertIn('64,1 kcal', draft['text'])
+        self.assertIn('Total estimado', draft['text'])
+        self.store.ingest(self.event('CONFIRMAR', 'confirm-nutrition-22'), 'nutri')
+        record = self.store.records.list(self.patient['id'])['records'][0]
+        self.assertAlmostEqual(record['nutrition']['energyKcal'], 128.258486 / 2, places=3)
+        self.assertEqual(record['mealType'], 'breakfast')
+        self.assertGreater(record['nutrition']['carbsG'], 0)
+
+    def test_unknown_ingredients_produce_only_an_explicit_partial_total(self):
+        draft = self.propose([
+            {'kind': 'meal', 'text': 'pão de forma comum', 'quantity': 50, 'unit': 'g', 'mealType': 'breakfast'},
+            {'kind': 'meal', 'text': 'mussarela', 'quantity': 7, 'unit': 'g', 'mealType': 'breakfast'},
+            {'kind': 'meal', 'text': 'presunto', 'quantity': 8, 'unit': 'g', 'mealType': 'breakfast'},
+        ])
+        self.assertIn('refeição incompleta', draft['text'])
+        self.assertNotIn('Total estimado:', draft['text'])
+        self.assertIn('sódio', draft['text'])
+        self.assertLessEqual(len(draft['text']), 1800)
+
     def test_ambiguous_ham_and_common_bread_are_not_guessed(self):
         self.propose([{'kind': 'meal', 'text': 'presunto', 'quantity': 8, 'unit': 'g'},
                       {'kind': 'meal', 'text': 'pão de forma comum', 'quantity': 50, 'unit': 'g'}])

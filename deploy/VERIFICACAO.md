@@ -25,3 +25,7 @@ Um backup privado deles é necessário para futuras atualizações do APK.
 
 22 testes de servidor e 18 testes do workflow aprovados. Cinco testes Flutter específicos da conexão, persistência, isolamento de perfil e interface aprovados; análise Flutter sem problemas. O build usa versionCode base 69, mantendo a assinatura do teste anterior. O teste real de WhatsApp depende da configuração do operador.
 
+
+## Atualização v0.3.0-teste.1
+
+32 testes de servidor e 21 testes do workflow aprovados; 6 testes Flutter específicos aprovados. Análise Flutter sem problemas. Novos testes cobrem autorização e cancelamento de lembretes, idempotência de horários, nome persistente, proporção dos nutrientes, total parcial e categoria explícita de refeição importada no app. Não houve envio real de lembrete nem chamada paga à IA nesta verificação. O operador deve atualizar API, workflow e APK e validar no ambiente real.

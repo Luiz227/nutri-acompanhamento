@@ -67,6 +67,12 @@ if (!model || model === 'CONFIGURE_MODEL') throw new Error('Selecione um modelo 
 return [{json: makePrompt($json, model)}];`, 1840, -180);
 http('Consultar IA', 'https://api.openai.com/v1/chat/completions', '={{ JSON.stringify($json) }}',
   'Nutri - IA (Authorization)', 2060, -180, { onError: 'continueRegularOutput' });
+// Use n8n's native OpenAI credential so it builds the Authorization header.
+const aiNode = nodes.find(n => n.name === 'Consultar IA');
+aiNode.parameters.authentication = 'predefinedCredentialType';
+aiNode.parameters.nodeCredentialType = 'openAiApi';
+delete aiNode.parameters.genericAuthType;
+aiNode.credentials = { openAiApi: { name: 'Nutri - OpenAI' } };
 code('Ler resposta da IA', [agent.parseAssistantResult],
   'return [{json: {...$("Aplicar autorização").first().json, ...parseAssistantResult($json)}}];', 2280, -180);
 http('Autorizar e reservar envio', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/reserve" }}',

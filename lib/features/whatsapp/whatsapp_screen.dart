@@ -202,6 +202,21 @@ class _WhatsappScreenState extends State<WhatsappScreen>
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Text(record['text'] as String? ?? ''),
+            if (record['mealType'] != null)
+              Text(
+                const {
+                      'breakfast': 'Café da manhã',
+                      'lunch': 'Almoço',
+                      'dinner': 'Jantar',
+                      'snack': 'Lanche',
+                    }[record['mealType']] ??
+                    '',
+              ),
+            if (record['nutrition'] is Map &&
+                record['nutrition']['energyKcal'] is num)
+              Text(
+                '${(record['nutrition']['energyKcal'] as num).toStringAsFixed(1)} kcal (TACO)',
+              ),
             if (record['quantity'] != null)
               Text('${record['quantity']} ${record['unit']}'),
             if (record['kind'] == 'meal' && record['foodCode'] == null)

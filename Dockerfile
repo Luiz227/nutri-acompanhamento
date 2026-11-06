@@ -3,6 +3,7 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 DATA_DIR=/data PORT=8080
 WORKDIR /app
 COPY server/app.py /app/app.py
 COPY server/records.py /app/records.py
+COPY server/coaching.py /app/coaching.py
 COPY assets/data/taco_4ed.json /app/taco_4ed.json
 COPY LICENSE NOTICE.md /app/legal/
 COPY assets/data/TACO-NOTICE.txt /app/legal/TACO-NOTICE.txt

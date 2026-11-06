@@ -2,6 +2,7 @@
 !server/
 !server/app.py
 !server/records.py
+!server/coaching.py
 !assets/
 !assets/data/
 !assets/data/taco_4ed.json

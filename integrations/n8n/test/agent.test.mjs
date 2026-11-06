@@ -2,12 +2,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { normalizeApp, normalizeEvolution, routeJob, makePrompt, parseReply,
+import { normalizeApp, normalizeEvolution, routeJob, makePrompt, parseReply, parseAssistantResult,
   validateDispatch, deliveryReceipt } from '../src/agent.mjs';
 
 const inbound = (text = 'Olá') => ({ event: 'messages.upsert', instance: 'nutri',
   data: { key: { id: 'msg-123', remoteJid: '5511999999999@s.whatsapp.net', fromMe: false },
     message: { conversation: text } } });
+
+test('authenticated reminder notification retains its kind and uses server text', () => {
+  const event = normalizeApp({kind:'reminder',eventId:'reminder:patient-1:20261106T0900',userId:'patient-1',phone:'5511999999999',
+    consent:{granted:true,version:'test',at:new Date().toISOString()}});
+  assert.equal(event.kind,'reminder');
+  const routed=routeJob({...event,action:'reply',verified:true,consentActive:true,text:'Oi, lembrete de água.'},event);
+  assert.equal(routed.candidate,'Oi, lembrete de água.');
+});
+
+test('structured meal keeps explicit category and user context for deterministic server calculation', () => {
+  const record={kind:'meal',text:'Queijo, mozarela',quantity:7,unit:'g',mealType:'breakfast'};
+  const parsed=parseAssistantResult({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Vamos conferir seu café da manhã.',record})}}]});
+  assert.deepEqual(parsed.record,record);
+  const prompt=JSON.stringify(makePrompt({message:'7 gramas',context:{displayName:'Luiz',waterReminders:'Desativados'},history:[]},'model-test'));
+  assert.match(prompt,/Luiz/);
+  assert.match(prompt,/mealType/);
+  assert.match(prompt,/Desativados/);
+});
 
 test('accented instance is preserved and unsafe instance names are rejected', () => {
   const body = { ...inbound(), instance: 'Nutrição' };

@@ -252,13 +252,20 @@ class BridgeSession {
       );
       if (!sameProfile || matches.length != 1) return;
       final hour = date.hour;
-      final type = hour < 11
+      final inferred = hour < 11
           ? IntakeTypeEntity.breakfast
           : hour < 15
           ? IntakeTypeEntity.lunch
           : hour < 19
           ? IntakeTypeEntity.snack
           : IntakeTypeEntity.dinner;
+      final type = switch (record['mealType']) {
+        'breakfast' => IntakeTypeEntity.breakfast,
+        'lunch' => IntakeTypeEntity.lunch,
+        'dinner' => IntakeTypeEntity.dinner,
+        'snack' => IntakeTypeEntity.snack,
+        _ => inferred,
+      };
       await locator<IntakeRepository>().addIntake(
         IntakeEntity(
           id: id,
