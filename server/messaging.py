@@ -45,7 +45,48 @@ class Messaging:
           position INTEGER NOT NULL, text TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
           provider_id TEXT, UNIQUE(dispatch_id,position));''')
 
-    def collect(self, event, instance):
+        self.db.execute("""CREATE TABLE IF NOT EXISTS media_jobs (
+          id TEXT PRIMARY KEY, patient_id TEXT NOT NULL REFERENCES patients(id),
+          token TEXT NOT NULL, created REAL NOT NULL, status TEXT NOT NULL)""")
+
+    def begin_media(self, event, instance):
+        """Admit once before downloading media or paying for interpretation."""
+        with self.changed, self.db:
+            if not isinstance(event, dict) or event.get('kind') != 'incoming' or event.get('instance') != instance:
+                return {'approved': False}
+            event_id = event.get('eventId', '')
+            if not isinstance(event_id, str) or not 8 <= len(event_id) <= 300 or event.get('mediaType') not in ('image', 'audio'):
+                return {'approved': False}
+            patient = self.db.execute('SELECT * FROM patients WHERE phone=? AND verified=1 AND consent=1', (event.get('phone'),)).fetchone()
+            if not patient or self.db.execute('SELECT id FROM media_jobs WHERE id=?', (event_id,)).fetchone():
+                return {'approved': False}
+            count = self.db.execute('SELECT count(*) FROM media_jobs WHERE patient_id=? AND created>?', (patient['id'], time.time()-300)).fetchone()[0]
+            if count >= 10:
+                return {'approved': False}
+            token = str(uuid.uuid4())
+            self.db.execute('INSERT INTO media_jobs VALUES(?,?,?,?,?)', (event_id, patient['id'], token, time.time(), 'processing'))
+            self.db.execute("INSERT INTO inbox(id,patient_id,text,created,status) VALUES(?,?,?,?,'processing')", (event_id, patient['id'], '', time.time()))
+            self.changed.notify_all()
+            return {'approved': True, 'mediaToken': token}
+
+    def finish_media(self, body, instance):
+        event = body.get('event', {})
+        with self.changed, self.db:
+            row = self.db.execute("""SELECT m.*,p.phone,p.verified,p.consent FROM media_jobs m
+                JOIN patients p ON p.id=m.patient_id WHERE m.id=?""", (event.get('eventId'),)).fetchone()
+            if (not row or row['status'] != 'processing' or row['token'] != body.get('mediaToken') or
+                not row['consent'] or not row['verified'] or row['phone'] != event.get('phone') or event.get('instance') != instance or
+                time.time()-row['created'] > 100):
+                return {'action': 'ignore'}
+            text = event.get('text')
+            if not isinstance(text, str) or not 1 <= len(text.strip()) <= 4000:
+                return {'action': 'ignore'}
+            self.db.execute("UPDATE media_jobs SET status='processed' WHERE id=?", (row['id'],))
+            self.db.execute("UPDATE inbox SET text=?,status='pending' WHERE id=? AND status='processing'", (text.strip(), row['id']))
+            self.changed.notify_all()
+        return self.collect(event, instance, admitted=True)
+
+    def collect(self, event, instance, admitted=False):
         if not isinstance(event, dict) or event.get('kind') != 'incoming':
             return self.store.ingest(event, instance)
         with self.changed:
@@ -59,16 +100,18 @@ class Messaging:
                                     'PARAR LEMBRETES', 'CANCELAR LEMBRETES', 'PARAR LEMBRETES DE ÁGUA',
                                     'CANCELAR LEMBRETES DE ÁGUA', 'ALTERAR LEMBRETES', 'ATIVAR LEMBRETES') or re.fullmatch(r'\d{6}', command)
             if not p or not prefs or prefs['stage'] != 'done' or immediate:
+                if admitted:
+                    self.db.execute("UPDATE inbox SET status='consumed' WHERE id=? AND status='pending'", (event.get('eventId'),))
                 if phone and command in ('SAIR', 'PARAR', 'CANCELAR', 'STOP'):
                     with self.db:
-                        self.db.execute("UPDATE inbox SET status='cancelled' WHERE patient_id IN (SELECT id FROM patients WHERE phone=?) AND status='pending'", (phone,))
+                        self.db.execute("UPDATE inbox SET status='cancelled' WHERE patient_id IN (SELECT id FROM patients WHERE phone=?) AND status IN ('pending','processing')", (phone,))
                     self.changed.notify_all()
                 with self.db:
                     return self.store._ingest(event, instance)
             event_id = event.get('eventId', '')
             if not isinstance(event_id, str) or not 8 <= len(event_id) <= 300:
                 return {'action': 'ignore'}
-            if self.db.execute('SELECT id FROM inbox WHERE id=?', (event_id,)).fetchone():
+            if not admitted and self.db.execute('SELECT id FROM inbox WHERE id=?', (event_id,)).fetchone():
                 return {'action': 'ignore'}
             pending = self.db.execute("SELECT text FROM inbox WHERE patient_id=? AND status='pending'", (p['id'],)).fetchall()
             # Preserve oversized bursts by processing the extra message separately, never truncating it.
@@ -76,10 +119,19 @@ class Messaging:
                 with self.db:
                     return self.store._ingest(event, instance)
             with self.db:
-                self.db.execute('INSERT INTO inbox(id,patient_id,text,created) VALUES(?,?,?,?)',
-                                (event_id, p['id'], text.strip(), time.time()))
+                if not admitted:
+                    self.db.execute('INSERT INTO inbox(id,patient_id,text,created) VALUES(?,?,?,?)',
+                                    (event_id, p['id'], text.strip(), time.time()))
             self.changed.notify_all()
             while True:
+                processing = self.db.execute("SELECT * FROM inbox WHERE patient_id=? AND status='processing'", (p['id'],)).fetchall()
+                for media in processing:
+                    if time.time()-media['created'] > 90:
+                        with self.db:
+                            self.db.execute("UPDATE inbox SET status='pending',text=? WHERE id=?", ('[Falha ao ler uma mídia. Peça para reenviar; não registre consumo a partir dela.]', media['id']))
+                if any(time.time()-m['created'] <= 90 for m in processing):
+                    self.changed.wait(timeout=1)
+                    continue
                 rows = self.db.execute("SELECT * FROM inbox WHERE patient_id=? AND status='pending' ORDER BY created,rowid", (p['id'],)).fetchall()
                 if not rows or rows[-1]['id'] != event_id:
                     return {'action': 'ignore'}

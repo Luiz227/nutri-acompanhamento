@@ -22,15 +22,15 @@ void main() {
     );
 
     expect(
-      find.text('Your local data could not be opened safely'),
+      find.text('Não foi possível abrir seu diário com segurança'),
       findsOneWidget,
     );
     expect(
-      find.text('Error code: hive_wrong_key_or_corrupted'),
+      find.text('Código do erro: hive_wrong_key_or_corrupted'),
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.text('Tentar novamente'));
     await tester.pump();
 
     expect(retryCount, 1);

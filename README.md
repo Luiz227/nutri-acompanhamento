@@ -4,10 +4,14 @@ Derivado do [OpenNutriTracker](https://github.com/simonoppowa/OpenNutriTracker),
 com autoria e histórico preservados, sob [GNU GPLv3](LICENSE).
 Veja [créditos e alterações](NOTICE.md) e [documentação original](README.upstream.md).
 
+## Atualização 0.6
+
+Fotos de refeições, áudios curtos, porções por unidade com referências do IBGE e abertura com progresso em português. Veja [como atualizar e testar](deploy/MIDIA-E-ABERTURA.md). A confirmação no Galaxy ainda exige teste no aparelho.
+
 ## O que está preparado
 
 **Fluxo atualizado:** cadastro com WhatsApp → boas-vindas → conversa pelo WhatsApp
-→ confirmação do registro → atualização automática no aplicativo. O usuário
+→ registro automático validado → atualização no aplicativo. O usuário
 não precisa preencher endereço de servidor. Veja [o fluxo completo](deploy/FLUXO-WHATSAPP.md).
 
 - Aplicativo Android em português brasileiro, TACO offline e tela
@@ -35,7 +39,7 @@ na área de releases ou pode ser entregue junto com sua fonte correspondente.
 4. Instale o APK no seu Android e abra a tela de acompanhamento.
 5. Informe seu WhatsApp com 55/DDD e autorize durante o cadastro; o endereço é configurado pelo administrador.
 6. Responda no WhatsApp com o código de seis dígitos mostrado no app.
-7. Converse pelo WhatsApp e responda CONFIRMAR às anotações. Consulte Registros do WhatsApp no app.
+7. Converse pelo WhatsApp; refeições e água são registradas sem CONFIRMAR. Consulte Registros do WhatsApp no app.
 
 Com `AI_RESPONSES_ENABLED=false`, as respostas são fixas para testar o caminho
 completo. Com `true`, o servidor permite a conversa geral da IA do n8n;

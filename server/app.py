@@ -360,6 +360,7 @@ class Store:
         with self.lock, self.db:
             self.db.execute('DELETE FROM history WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM inbox WHERE created<?', (time.time() - 30 * 86400,))
+            self.db.execute('DELETE FROM media_jobs WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM dispatch_parts WHERE dispatch_id IN (SELECT id FROM dispatches WHERE created<?)', (time.time() - 30 * 86400,))
             self.db.execute('UPDATE patients SET code_hash=NULL WHERE code_until<?', (time.time(),))
 
@@ -395,7 +396,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 6, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 7, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}
@@ -412,7 +413,11 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
                         raise Problem(401, 'Credencial de serviço inválida.')
                     if self.command != 'POST':
                         raise Problem(405, 'Método não permitido.')
-                    if path == '/v1/nutri/events/collect':
+                    if path == '/v1/nutri/media/authorize':
+                        data = store.messaging.begin_media(body.get('event', {}), instance)
+                    elif path == '/v1/nutri/media/complete':
+                        data = store.messaging.finish_media(body, instance)
+                    elif path == '/v1/nutri/events/collect':
                         data = store.messaging.collect(body.get('event', {}), instance)
                     elif path == '/v1/nutri/dispatches/part':
                         data = store.messaging.authorize(body, instance)

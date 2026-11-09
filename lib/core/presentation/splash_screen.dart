@@ -31,26 +31,36 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _controller;
   late final Animation<double> _spin;
   Timer? _startTimer;
+  Timer? _navigationTimer;
   bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
+    // A paused/disabled animation must never trap a returning user here.
+    _navigationTimer = Timer(const Duration(seconds: 3), _goNext);
     _controller = AnimationController(vsync: this, duration: _spinDuration);
 
     // Accelerate in, then decelerate to a stop — mirrors the design mock's
     // cubic-bezier easing (0.45, 0, 0.12, 1). A single full turn (turns: 0 → 1)
     // leaves the spoon back in its original upright position.
-    _spin = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
-        parent: _controller, curve: const Cubic(0.45, 0.0, 0.12, 1.0)));
+    _spin = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Cubic(0.45, 0.0, 0.12, 1.0),
+      ),
+    );
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) _goNext();
     });
 
     // Honour the OS "reduce motion" setting: skip the spin and move on.
-    final reduceMotion = WidgetsBinding.instance.platformDispatcher
-        .accessibilityFeatures.disableAnimations;
+    final reduceMotion = WidgetsBinding
+        .instance
+        .platformDispatcher
+        .accessibilityFeatures
+        .disableAnimations;
     if (reduceMotion) {
       _startTimer = Timer(const Duration(milliseconds: 600), _goNext);
     } else {
@@ -64,14 +74,17 @@ class _SplashScreenState extends State<SplashScreen>
   void _goNext() {
     if (_navigated || !mounted) return;
     _navigated = true;
-    Navigator.of(context).pushReplacementNamed(widget.userInitialized
-        ? NavigationOptions.mainRoute
-        : NavigationOptions.onboardingRoute);
+    Navigator.of(context).pushReplacementNamed(
+      widget.userInitialized
+          ? NavigationOptions.mainRoute
+          : NavigationOptions.onboardingRoute,
+    );
   }
 
   @override
   void dispose() {
     _startTimer?.cancel();
+    _navigationTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -92,14 +105,19 @@ class _SplashScreenState extends State<SplashScreen>
           child: Stack(
             alignment: Alignment.center,
             children: [
-              SvgPicture.asset('assets/icon/ont_splash_rings.svg',
-                  width: _logoSize, height: _logoSize),
+              SvgPicture.asset(
+                'assets/icon/ont_splash_rings.svg',
+                width: _logoSize,
+                height: _logoSize,
+              ),
               RotationTransition(
                 turns: _spin,
-                child: SvgPicture.asset('assets/icon/ont_splash_spoon.svg',
-                    width: _logoSize,
-                    height: _logoSize,
-                    theme: SvgTheme(currentColor: spoonColor)),
+                child: SvgPicture.asset(
+                  'assets/icon/ont_splash_spoon.svg',
+                  width: _logoSize,
+                  height: _logoSize,
+                  theme: SvgTheme(currentColor: spoonColor),
+                ),
               ),
             ],
           ),

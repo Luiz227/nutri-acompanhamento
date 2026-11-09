@@ -8,6 +8,7 @@ import uuid
 import difflib
 import random
 from nutrition_sources import ProductSource
+from portions import portion
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -73,6 +74,16 @@ def validate_record(raw):
         amount, unit = raw.get('quantity'), raw.get('unit')
         if isinstance(amount, bool) or not isinstance(amount, (float, int)) or not math.isfinite(amount) or amount <= 0:
             raise ValueError('Confirme a quantidade e a unidade antes de registrar.')
+        if raw['kind'] == 'meal' and unit in ('unit', 'slice'):
+            measure = portion(text, unit, raw.get('portionSize', 'medium'))
+            if not measure or amount > 30:
+                raise ValueError('Para esse alimento ainda não tenho uma medida média confiável. Você consegue dizer o tamanho ou uma quantidade aproximada em gramas?')
+            result.update(estimated=True, portionCount=amount, portionReference=measure,
+                          estimateSource='household')
+            amount *= measure['grams']
+            unit = 'g'
+        if raw['kind'] == 'meal' and raw.get('estimateSource') == 'photo':
+            result.update(estimated=True, estimateSource='photo')
         units = {'meal': {'g': 1}, 'water': {'ml': 1, 'l': 1000}, 'weight': {'kg': 1, 'g': .001}}
         if unit not in units[raw['kind']]:
             raise ValueError('Refeições precisam de gramas, água de ml/l e peso de kg/g.')
@@ -168,7 +179,15 @@ class Records:
                 paragraphs.append(f"{random.choice(introductions)} {record['quantity']:g} ml de água no seu diário. 💧")
             elif record['kind'] == 'meal':
                 label = MEAL_LABELS.get(record.get('mealType'), 'refeição').lower()
-                paragraphs.append(f"{random.choice(introductions)} no {label}: {record['quantity']:g} g de {record['text']}.")
+                if record.get('estimateSource') == 'household':
+                    measure = 'fatia' if record['portionReference']['unit'] == 'slice' else 'unidade'
+                    if record['portionCount'] != 1:
+                        measure += 's'
+                    paragraphs.append(f"{random.choice(introductions)} no {label}: {record['portionCount']:g} {measure} de {record['text']}. Considerei aproximadamente {record['quantity']:g} g pela medida média.")
+                elif record.get('estimateSource') == 'photo':
+                    paragraphs.append(f"Pela foto, anotei no {label} aproximadamente {record['quantity']:g} g de {record['text']}. O peso foi estimado pela imagem.")
+                else:
+                    paragraphs.append(f"{random.choice(introductions)} no {label}: {record['quantity']:g} g de {record['text']}.")
                 if 'nutrition' in record:
                     n = record['nutrition']
                     def value(key, unit):
@@ -192,7 +211,7 @@ class Records:
         # Keep the WhatsApp payload bounded without truncating saved food data.
         message = '\n\n'.join(paragraphs)
         if len(message) > 1800:
-            compact = [p for p in paragraphs if not p.startswith('Essa porção tem')]
+            compact = [p for p in paragraphs if not p.startswith(('Essa porção tem', 'Para essa porção, estimei'))]
             message = '\n\n'.join(compact)
         if len(message) > 1800:
             raise ValueError('Envie até três alimentos por mensagem para eu organizar os detalhes.')

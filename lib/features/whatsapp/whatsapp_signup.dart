@@ -68,7 +68,7 @@ class _WhatsappSignupState extends State<WhatsappSignup> {
           },
           title: const Text('Quero receber o acompanhamento no WhatsApp.'),
           subtitle: const Text(
-            'Autorizo o envio do meu cadastro e dos registros confirmados ao servidor do aplicativo, n8n, Evolution/WhatsApp e provedor de IA configurado. Posso cancelar enviando SAIR.',
+            'Autorizo o uso do meu cadastro e das mensagens, fotos e áudios que eu enviar para acompanhar minha alimentação, pelo servidor do aplicativo, n8n, Evolution/WhatsApp e provedor de IA configurado. As porções podem ser estimadas. Posso cancelar enviando SAIR.',
           ),
         ),
       ),

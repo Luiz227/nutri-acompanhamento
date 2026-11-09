@@ -38,6 +38,8 @@ function simulate(trigger, body, options = {}) {
       const outputs = evaluate('(function(){' + code + '\n})()', value);
       if (name === 'Preparar partes') queue = outputs.map(o => o.json);
       value = outputs[0].json;
+    } else if (node.type.endsWith('.convertToFile')) {
+      value={};
     } else if (node.type.endsWith('.splitInBatches')) {
       if (queue.length) { value = queue.shift(); branch = 1; } else { branch = 0; }
     } else if (node.type.endsWith('.wait')) {
@@ -46,9 +48,14 @@ function simulate(trigger, body, options = {}) {
       branch = expression(node.parameters.conditions.conditions[0].leftValue, value) ? 0 : 1;
     } else if (node.type.endsWith('.httpRequest')) {
       const url = expression(node.parameters.url, value);
-      const payload = JSON.parse(expression(node.parameters.jsonBody, value));
+      const payload = node.parameters.jsonBody ? JSON.parse(expression(node.parameters.jsonBody, value)) : {};
       calls.push({ name, url, payload });
       switch (name) {
+        case 'Autorizar leitura de mídia': value={approved:!options.mediaBlocked,mediaToken:'media-claim-test'};break;
+        case 'Baixar mídia da Evolution': value={base64:'a'.repeat(64),mimetype:body.data.message.imageMessage?'image/jpeg':'audio/mp4'};break;
+        case 'Ler foto com IA': value={choices:[{finish_reason:'stop',message:{content:JSON.stringify({usable:true,description:'Uma maçã média'})}}]};break;
+        case 'Transcrever áudio': value={text:'Comi uma maçã no lanche'};break;
+        case 'Concluir leitura e agrupar': value={...job,message:payload.event.text};break;
         case 'Consultar servidor do aplicativo': value = options.ignore ? { action: 'ignore' } : job; break;
         case 'Consultar IA': value = { choices: [{ message: { content: JSON.stringify({reply:'Como foi seu almoço?',record:null}) }, finish_reason: 'stop' }] }; break;
         case 'Autorizar e reservar envio': texts = options.parts ?? [payload.candidate]; value = options.block ? { approved: false } : {
@@ -120,4 +127,19 @@ test('multipart loop sends parts in order and rechecks consent before each one',
   assert.equal(calls.filter(c=>c.name==='Revalidar parte').length,2);
   const cancelled=simulate('Mensagem da Evolution',message('Oi'),{parts:['Primeira','Segunda'],cancelAfterFirst:true});
   assert.equal(cancelled.filter(c=>c.name==='Enviar pela Evolution').length,1);
+});
+
+
+test('photo and audio graph authorize before download, then collect interpretation before response',()=>{
+  for(const type of ['image','audio']) {
+    const p=message('');p.data.message=type==='image'?{imageMessage:{caption:'meu lanche'}}:{audioMessage:{seconds:10}};
+    const calls=simulate('Mensagem da Evolution',p);
+    const names=calls.map(c=>c.name);
+    assert.ok(names.indexOf('Autorizar leitura de mídia')<names.indexOf('Baixar mídia da Evolution'));
+    assert.ok(names.includes(type==='image'?'Ler foto com IA':'Transcrever áudio'));
+    assert.ok(names.indexOf('Concluir leitura e agrupar')<names.indexOf('Consultar IA'));
+    assert.ok(names.includes('Enviar pela Evolution'));
+    const blocked=simulate('Mensagem da Evolution',p,{mediaBlocked:true});
+    assert.deepEqual(blocked.map(c=>c.name),['Autorizar leitura de mídia']);
+  }
 });

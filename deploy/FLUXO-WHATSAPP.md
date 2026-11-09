@@ -1,6 +1,6 @@
 # Cadastro no aplicativo, atendimento pelo WhatsApp
 
-**Versão atual 0.4 / API v5:** o registro agora é automático, sem confirmação. A apresentação, as fontes e as sugestões foram atualizadas. Consulte [Conversa natural](CONVERSA-NATURAL.md); seções históricas abaixo descrevem versões anteriores.
+**Versão atual 0.6 / API v7:** veja [fotos, áudios e abertura](MIDIA-E-ABERTURA.md). Histórico: o registro agora é automático, sem confirmação. A apresentação, as fontes e as sugestões foram atualizadas. Consulte [Conversa natural](CONVERSA-NATURAL.md); seções históricas abaixo descrevem versões anteriores.
 
 ## Para o usuário
 

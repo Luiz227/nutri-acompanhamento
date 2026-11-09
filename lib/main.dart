@@ -14,6 +14,7 @@ import 'package:opennutritracker/core/l10n/app_locales.dart';
 import 'package:opennutritracker/core/presentation/main_screen.dart';
 import 'package:opennutritracker/core/presentation/splash_screen.dart';
 import 'package:opennutritracker/core/presentation/storage_recovery_app.dart';
+import 'package:opennutritracker/core/presentation/startup_app.dart';
 import 'package:opennutritracker/core/presentation/widgets/image_full_screen.dart';
 import 'package:opennutritracker/core/presentation/widgets/keyboard_dismisser.dart';
 import 'package:opennutritracker/core/styles/app_palette.dart';
@@ -77,13 +78,22 @@ Future<void> main() async {
     ], '$notice\n\n$license');
   });
   LoggerConfig.intiLogger();
-  await _bootstrapApp();
+  runApp(const StartupApp());
+  await WidgetsBinding.instance.endOfFrame;
+  try {
+    await _bootstrapApp();
+  } catch (error, stack) {
+    Logger(
+      'main',
+    ).severe('Startup failed at ${startupStage.value}', error, stack);
+    startupFailure.value = true;
+  }
 }
 
 Future<void> _bootstrapApp() async {
   final log = Logger('main');
   try {
-    await initLocator();
+    await initLocator(onStage: (stage) => startupStage.value = stage);
   } on HiveStorageIntegrityException catch (error, stackTrace) {
     // Consent (and thus Sentry) lives in the encrypted Config Hive box, so it
     // cannot be read on this path. Keep diagnostics local and preserve the
@@ -104,6 +114,7 @@ Future<void> _bootstrapApp() async {
     locator<RemoteSearchCacheDataSource>().pruneStale(const Duration(days: 90)),
   );
 
+  startupStage.value = 'Organizando suas preferências';
   final isUserInitialized = await locator<UserDataSource>().hasUserData();
   final configRepo = locator<ConfigRepository>();
 
@@ -117,6 +128,7 @@ Future<void> _bootstrapApp() async {
   // Android's own per-app language picker and ours are two doors into the
   // same setting, so ask the system what it holds before trusting what we
   // saved. See [reconcileAppLocale] for which side wins and why.
+  startupStage.value = 'Preparando o idioma';
   final systemLocale = await AppLocaleService.getApplicationLocale();
   final localeCode = await reconcileAppLocale(
     savedLocaleCode: await configRepo.getSelectedLocale(),

@@ -58,7 +58,7 @@ http('Consultar servidor do aplicativo', '={{ $("Configurar conexões").first().
   '={{ JSON.stringify({event: Object.fromEntries(Object.entries($("Configurar conexões").first().json).filter(([key]) => key !== "config"))}) }}',
   'Nutri - API do aplicativo', 940, 40);
 code('Aplicar autorização', [agent.routeJob],
-  'const event = $("Configurar conexões").first().json; return [{json: routeJob($json, event)}];', 1180, 40);
+  'const original = $("Configurar conexões").first().json; const event = original.mediaType ? $("Unir mídia ao diálogo").first().json.event : original; return [{json: routeJob($json, event)}];', 1180, 40);
 condition('Responder?', '={{ $json.action !== "ignore" }}', 1400, 40);
 condition('Usar IA?', '={{ $json.action === "assistant" }}', 1620, -40);
 code('Preparar contexto da IA', [agent.makePrompt], `
@@ -90,7 +90,7 @@ code('Classificar resultado do envio', [agent.deliveryReceipt],
 http('Salvar resultado no servidor', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/result" }}',
   '={{ JSON.stringify($json) }}', 'Nutri - API do aplicativo', 3620, -120);
 code('Concluir evento', [], 'return [{json: {ok: true}}];', 3860, 160);
-add('Leia antes de ativar', 'stickyNote', 1, { content: `## Nutri + Evolution API v2\n**Importação desativada.**\n1. Leia README.md e deploy/EASYPANEL.md na raiz.\n2. Publique o servidor server/app.py e configure seu volume.\n3. Configure credenciais e URLs nos nós.\n4. Escolha o modelo de IA e habilite enabled no nó Configurar conexões.\n5. Teste com seu próprio número antes de publicar.\n\nO servidor usa respostas fixas por padrão; AI_RESPONSES_ENABLED=true libera conversa geral. A IA propõe refeições, água, peso e observações. A API v5 registra automaticamente sem confirmação. Nutrientes vêm da TACO e de produtos Open Food Facts; aproximações são identificadas. Parágrafos viram mensagens curtas. Sugestões gerais exigem autorização e preferências. Não há prescrição. SAIR é persistido antes da confirmação.`, width: 570, height: 360 }, 0, -450);
+add('Leia antes de ativar', 'stickyNote', 1, { content: `## Nutri + Evolution API v2\n**Importação desativada.**\n1. Leia README.md e deploy/EASYPANEL.md na raiz.\n2. Publique o servidor server/app.py e configure seu volume.\n3. Configure credenciais e URLs nos nós.\n4. Escolha o modelo de IA e habilite enabled no nó Configurar conexões.\n5. Teste com seu próprio número antes de publicar.\n\nO servidor usa respostas fixas por padrão; AI_RESPONSES_ENABLED=true libera conversa geral. A IA propõe refeições, água, peso e observações. A API v7 registra automaticamente sem confirmação. Fotos e áudios são autorizados antes da leitura; porções médias têm referência IBGE. Nutrientes vêm da TACO e de produtos Open Food Facts; aproximações são identificadas. Parágrafos viram mensagens curtas. Sugestões gerais exigem autorização e preferências. Não há prescrição. SAIR é persistido antes da confirmação.`, width: 570, height: 360 }, 0, -450);
 
 // Collect bursts in SQLite; no global workflow static data or cross-patient buffers.
 nodes.find(n => n.name === 'Consultar servidor do aplicativo').parameters.options.timeout = 60000;
@@ -113,9 +113,48 @@ add('Pausa entre partes', 'wait', 1.1, {resume: 'timeInterval', amount: 2, unit:
 nodes.find(n => n.name === 'Enviar pela Evolution').position = [4050, -120];
 classify.position = [4260, -120]; receiptNode.position = [4480, -120];
 
+// Media is authorized by the backend before any provider download or AI cost.
+condition('Tem mídia?', '={{ ["image","audio"].includes($json.mediaType) }}', 820, 400);
+http('Autorizar leitura de mídia', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/media/authorize" }}',
+  '={{ JSON.stringify({event: $("Configurar conexões").first().json}) }}', 'Nutri - API do aplicativo', 1040, 400);
+condition('Mídia autorizada?', '={{ $json.approved === true }}', 1260, 400);
+http('Baixar mídia da Evolution', '={{ $("Configurar conexões").first().json.config.evolutionBaseUrl + "/chat/getBase64FromMediaMessage/" + encodeURIComponent($("Configurar conexões").first().json.config.instance) }}',
+  '={{ JSON.stringify({message:{key:$("Configurar conexões").first().json.mediaKey}, convertToMp4:true}) }}',
+  'Nutri - Evolution (apikey)', 1480, 400, {onError:'continueRegularOutput'});
+code('Validar arquivo recebido', [agent.validateMedia], 'return [{json:validateMedia($json, $("Configurar conexões").first().json)}];', 1700, 400);
+condition('Arquivo válido?', '={{ $json.valid === true }}', 1920, 400);
+condition('É áudio?', '={{ $json.mediaType === "audio" }}', 2140, 400);
+add('Preparar arquivo de áudio', 'convertToFile', 1.1, {operation:'toBinary',sourceProperty:'base64',binaryPropertyName:'data',
+  options:{fileName:'={{ $json.fileName }}',mimeType:'={{ $json.mimeType }}'}},2360,300);
+add('Transcrever áudio', 'httpRequest', 4.2, {method:'POST',url:'https://api.openai.com/v1/audio/transcriptions',
+  authentication:'predefinedCredentialType',nodeCredentialType:'openAiApi',sendBody:true,contentType:'multipart-form-data',
+  bodyParameters:{parameters:[{name:'model',value:'gpt-transcribe'},
+    {parameterType:'formBinaryData',name:'file',inputDataFieldName:'data'}]},options:{timeout:60000}},2580,300,
+  {credentials:{openAiApi:{name:'Nutri - OpenAI'}},retryOnFail:false,onError:'continueRegularOutput'});
+code('Preparar leitura da foto', [agent.visionPrompt], 'return [{json:visionPrompt($json, $("Configurar conexões").first().json, $("Configurar conexões").first().json.config.model)}];',2360,540);
+http('Ler foto com IA', 'https://api.openai.com/v1/chat/completions', '={{ JSON.stringify($json) }}', 'unused',2580,540,{onError:'continueRegularOutput'});
+const visionNode=nodes.find(n=>n.name==='Ler foto com IA');
+visionNode.parameters.authentication='predefinedCredentialType';visionNode.parameters.nodeCredentialType='openAiApi';
+delete visionNode.parameters.genericAuthType;visionNode.credentials={openAiApi:{name:'Nutri - OpenAI'}};
+visionNode.parameters.options.timeout=60000;
+code('Unir mídia ao diálogo', [agent.mediaText], 'const event=$("Configurar conexões").first().json; const text=mediaText($json,event); const command=event.mediaType === "audio" && ["SAIR","PARAR","CANCELAR","STOP"].includes(text.trim().toUpperCase()) ? "stop" : null; return [{json:{event:{...event,text,command},mediaToken:$("Autorizar leitura de mídia").first().json.mediaToken}}];',2820,400);
+http('Concluir leitura e agrupar', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/media/complete" }}',
+  '={{ JSON.stringify($json) }}', 'Nutri - API do aplicativo',3040,400);
+nodes.find(n=>n.name==='Concluir leitura e agrupar').parameters.options.timeout=110000;
+nodes.find(n=>n.name==='Consultar servidor do aplicativo').parameters.options.timeout=110000;
+link('Tem mídia?', 'Autorizar leitura de mídia'); link('Tem mídia?', 'Consultar servidor do aplicativo',1);
+link('Autorizar leitura de mídia','Mídia autorizada?');link('Mídia autorizada?','Baixar mídia da Evolution');
+link('Mídia autorizada?','Concluir evento',1);link('Baixar mídia da Evolution','Validar arquivo recebido');
+link('Validar arquivo recebido','Arquivo válido?');link('Arquivo válido?','É áudio?');
+link('Arquivo válido?','Unir mídia ao diálogo',1);link('É áudio?','Preparar arquivo de áudio');
+link('É áudio?','Preparar leitura da foto',1);link('Preparar arquivo de áudio','Transcrever áudio');
+link('Transcrever áudio','Unir mídia ao diálogo');link('Preparar leitura da foto','Ler foto com IA');
+link('Ler foto com IA','Unir mídia ao diálogo');link('Unir mídia ao diálogo','Concluir leitura e agrupar');
+link('Concluir leitura e agrupar','Aplicar autorização');
+
 link('Cadastro do aplicativo', 'Validar cadastro'); link('Mensagem da Evolution', 'Filtrar mensagem');
 link('Validar cadastro', 'Configurar conexões'); link('Filtrar mensagem', 'Configurar conexões');
-link('Configurar conexões', 'Evento aceito?'); link('Evento aceito?', 'Consultar servidor do aplicativo');
+link('Configurar conexões', 'Evento aceito?'); link('Evento aceito?', 'Tem mídia?');
 link('Evento aceito?', 'Concluir evento', 1); link('Consultar servidor do aplicativo', 'Aplicar autorização');
 link('Aplicar autorização', 'Responder?'); link('Responder?', 'Usar IA?'); link('Responder?', 'Concluir evento', 1);
 link('Usar IA?', 'Preparar contexto da IA'); link('Usar IA?', 'Autorizar e reservar envio', 1);
@@ -137,7 +176,7 @@ link('Pausa entre partes', 'Enviar uma parte por vez');
 const workflow = { name: 'Nutri - Aplicativo + Evolution API + IA', nodes, connections, active: false,
   settings: { executionOrder: 'v1', timezone: 'America/Sao_Paulo',
     saveDataSuccessExecution: 'none', saveDataErrorExecution: 'none',
-    saveManualExecutions: false, saveExecutionProgress: false, executionTimeout: 180 },
+    saveManualExecutions: false, saveExecutionProgress: false, executionTimeout: 240 },
   pinData: {}, tags: [] };
 writeFileSync(new URL('./nutri-evolution.json', import.meta.url), JSON.stringify(workflow, null, 2) + '\n');
 console.log(`Gerado: ${nodes.length} nós. Fluxo desativado, sem segredos.`);

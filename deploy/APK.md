@@ -52,3 +52,7 @@ não basta. Não substitua o binário de uma tag por outra fonte.
 
 Referências: https://docs.flutter.dev/deployment/android
 https://www.gnu.org/licenses/gpl-3.0.html
+
+## Build 0.6 para Galaxy A03s (ARM32)
+
+Com Flutter 3.44.6, use `flutter build apk --release --flavor develop --split-per-abi --target-platform android-arm --dart-define=ENABLE_SUPABASE_FOOD_SEARCH=false`. Gerar uma arquitetura por vez reduz a memória necessária. O Gradle está limitado a um worker e 1 GB de heap. A release 0.6 fornece o APK ARM32 específico deste aparelho; não use esse arquivo em um dispositivo que aceite apenas ARM64. A fonte corresponde à tag v0.6.0-teste.1; use sua própria chave de assinatura para builds independentes.

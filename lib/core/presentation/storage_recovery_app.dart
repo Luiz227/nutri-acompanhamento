@@ -64,19 +64,19 @@ class _StorageRecoveryScreenState extends State<_StorageRecoveryScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Your local data could not be opened safely',
+                    'Não foi possível abrir seu diário com segurança',
                     style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Your data files have not been changed. Try again. If the problem persists, '
-                    'contact support before clearing the app data or reinstalling.',
+                    'Seus arquivos não foram apagados. Tente novamente. Se o problema continuar, '
+                    'entre em contato com o suporte antes de limpar os dados ou reinstalar o aplicativo.',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Error code: ${widget.errorCode}',
+                    'Código do erro: ${widget.errorCode}',
                     style: Theme.of(context).textTheme.bodySmall,
                     textAlign: TextAlign.center,
                   ),
@@ -91,7 +91,7 @@ class _StorageRecoveryScreenState extends State<_StorageRecoveryScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.refresh_rounded),
-                      label: const Text('Retry'),
+                      label: const Text('Tentar novamente'),
                     ),
                   ),
                 ],

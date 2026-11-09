@@ -38,3 +38,5 @@ tokens nem dados dos usuários. Uma versão privada precisa fornecer a fonte aos
 destinatários do APK por outro meio acessível, sem impedir seus direitos GPL.
 
 Versão 0.4: registro automático pelo WhatsApp, resumo conversacional e estimativas identificadas; integração de rótulos Open Food Facts (https://world.openfoodfacts.org), base sob Open Database License (ODbL), https://opendatacommons.org/licenses/odbl/1-0/. Não redistribuímos uma cópia da base; cada produto consultado mantém código, origem e URL. Sugestões gerais referenciam o Guia Alimentar para a População Brasileira, Ministério da Saúde (2014).
+
+Versão 0.6: leitura de fotos/áudios pelo n8n, porções médias com referência IBGE POF 2008-2009 (Tabela de Medidas Referidas, 2011, https://biblioteca.ibge.gov.br/visualizacao/livros/liv50000.pdf), e inicialização com progresso visível. A fonte/página de cada medida permanece no registro; não redistribuímos o PDF nem afirmamos peso exato de porções estimadas.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { normalizeApp, normalizeEvolution, routeJob, makePrompt, parseReply, parseAssistantResult,
-  validateDispatch, deliveryReceipt } from '../src/agent.mjs';
+  validateDispatch, deliveryReceipt, validateMedia, mediaText, visionPrompt } from '../src/agent.mjs';
 
 const inbound = (text = 'Olá') => ({ event: 'messages.upsert', instance: 'nutri',
   data: { key: { id: 'msg-123', remoteJid: '5511999999999@s.whatsapp.net', fromMe: false },
@@ -71,7 +71,7 @@ test('ignores outgoing, group, status, historic, LID and unsupported messages', 
     p => p.data.key.remoteJid = 'status@broadcast',
     p => p.data.key.remoteJid = '123@lid',
     p => p.event = 'messages.set',
-    p => p.data.message = { imageMessage: { caption: 'almoço' } },
+    p => p.data.message = { stickerMessage: {} },
   ]) {
     const p = inbound(); mutate(p); assert.equal(normalizeEvolution(p), null);
   }
@@ -152,4 +152,28 @@ test('every exported Code node compiles, including escaped config regexes', () =
   for (const node of flow.nodes.filter(n => n.type.endsWith('.code'))) {
     assert.doesNotThrow(() => new vm.Script('(function(){' + node.parameters.jsCode + '\n})'), node.name);
   }
+});
+
+
+test('photos and short audio retain only safe identifiers; view-once and groups never enter media AI',()=>{
+  const p=inbound();p.data.message={imageMessage:{caption:'Meu almoço',url:'https://untrusted.example',mediaKey:'not-forwarded'}};
+  const e=normalizeEvolution(p);assert.equal(e.mediaType,'image');assert.equal(e.caption,'Meu almoço');
+  assert.equal(e.mediaKey.id,'msg-123');assert.equal(JSON.stringify(e).includes('untrusted'),false);
+  p.data.message.imageMessage.viewOnce=true;assert.equal(normalizeEvolution(p),null);
+  p.data.message={audioMessage:{seconds:20}};assert.equal(normalizeEvolution(p).mediaType,'audio');
+  p.data.message.audioMessage.seconds=181;assert.equal(normalizeEvolution(p),null);
+  p.data.key.remoteJid='123@lid';p.data.key.remoteJidAlt='5511999999999@s.whatsapp.net';
+  p.data.message={audioMessage:{seconds:10}};assert.equal(normalizeEvolution(p).phone,'5511999999999');
+  p.data.key.remoteJid='123@g.us';assert.equal(normalizeEvolution(p),null);
+});
+test('media validates size, MIME and conversion; failures never fabricate a meal',()=>{
+  const event={mediaType:'image',caption:'foi meu almoço'};
+  const image=validateMedia({base64:'a'.repeat(64),mimetype:'image/jpeg'},event);
+  assert.equal(image.valid,true);assert.equal(validateMedia({base64:'a'.repeat(64),mimetype:'text/html'},event).valid,false);
+  assert.equal(validateMedia({base64:'a'.repeat(64),mimetype:'audio/ogg'},{mediaType:'audio'}).valid,false);
+  assert.equal(visionPrompt(image,event,'vision-model').messages.at(-1).content[1].image_url.url.startsWith('data:image/jpeg;base64,'),true);
+  assert.match(mediaText({error:'timeout'},event),/não registre/);
+  const text=mediaText({choices:[{finish_reason:'stop',message:{content:JSON.stringify({usable:true,description:'Uma maçã média'})}}]},event);
+  assert.match(text,/estimativas visuais/);assert.match(text,/foi meu almoço/);
+  assert.equal(mediaText({text:'Comi uma maçã'},{mediaType:'audio'}),'Comi uma maçã');
 });

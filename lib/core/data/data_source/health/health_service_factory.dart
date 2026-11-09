@@ -18,7 +18,9 @@ Future<HealthService> createHealthService() async {
     return const NoopHealthService();
   }
   try {
-    return await HealthPackageService.create();
+    return await HealthPackageService.create().timeout(
+      const Duration(seconds: 3),
+    );
   } catch (error, stackTrace) {
     _log.severe(
       'Health plugin failed to initialise; workout import disabled '

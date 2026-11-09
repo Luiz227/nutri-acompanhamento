@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 
 /// Bridges Android's per-app language setting, so the app's own language
@@ -32,8 +33,12 @@ class AppLocaleService {
   /// the honest answer.
   static Future<({String? tag, bool readFailed})> getApplicationLocale() async {
     try {
-      final tag = await _channel.invokeMethod<String?>('getApplicationLocale');
+      final tag = await _channel
+          .invokeMethod<String?>('getApplicationLocale')
+          .timeout(const Duration(seconds: 2));
       return (tag: tag, readFailed: false);
+    } on TimeoutException {
+      return (tag: null, readFailed: true);
     } on PlatformException {
       return (tag: null, readFailed: true);
     } on MissingPluginException {
@@ -45,9 +50,11 @@ class AppLocaleService {
   /// clear the override, which is what "System default" means in our picker.
   static Future<void> setApplicationLocale(String? languageTag) async {
     try {
-      await _channel.invokeMethod<void>('setApplicationLocale', {
-        'tag': languageTag,
-      });
+      await _channel
+          .invokeMethod<void>('setApplicationLocale', {'tag': languageTag})
+          .timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      // Keep the saved language when the optional system channel stalls.
     } on PlatformException {
       // A language that failed to reach the OS still applies inside the app.
       // The two pickers disagreeing is worth less than a crash on the screen

@@ -147,15 +147,17 @@ import 'package:opennutritracker/features/add_meal/data/data_sources/taco_food_d
 
 final locator = GetIt.instance;
 
-Future<void> initLocator() async {
+Future<void> initLocator({void Function(String)? onStage}) async {
   // Init secure storage and Hive database;
   final secureAppStorageProvider = SecureAppStorageProvider();
   final hiveDBProvider = HiveDBProvider();
-  await hiveDBProvider.initHiveDB(
-    await secureAppStorageProvider.getHiveEncryptionKey(),
-  );
+  onStage?.call('Protegendo seus dados');
+  final key = await secureAppStorageProvider.getHiveEncryptionKey();
+  onStage?.call('Abrindo seu diário salvo');
+  await hiveDBProvider.initHiveDB(key);
   // Resolve the active profile and open its box-set (creating the default
   // profile on first run) before anything reads per-profile data.
+  onStage?.call('Carregando seu perfil');
   await bootstrapActiveProfile(hiveDBProvider, secureAppStorageProvider);
   locator.registerLazySingleton<SecureAppStorageProvider>(
     () => secureAppStorageProvider,
@@ -203,6 +205,7 @@ Future<void> initLocator() async {
   );
 
   // Backend
+  onStage?.call('Preparando os serviços');
   await Supabase.initialize(
     url: Env.supabaseProjectUrl,
     publishableKey: Env.supabaseProjectAnonKey,
@@ -211,6 +214,12 @@ Future<void> initLocator() async {
     // every app log line in a second format. LoggerConfig already prints
     // everything — including supabase records — once.
     debug: false,
+    // This preview has no Supabase login. Do not recover/refresh a remote
+    // session before opening the local diary on every cold start.
+    authOptions: const FlutterAuthClientOptions(
+      autoRefreshToken: false,
+      persistSession: false,
+    ),
   );
   locator.registerLazySingleton<SupabaseClient>(() => Supabase.instance.client);
 
@@ -726,12 +735,15 @@ Future<void> initLocator() async {
   // Probed once here rather than per call: resolving the platform health
   // store needs an await, and a plugin that can't initialise falls back to a
   // service that reports itself unavailable instead of failing startup.
+  onStage?.call('Preparando a integração de atividades');
   final healthService = await createHealthService();
   locator.registerLazySingleton<HealthService>(() => healthService);
 
+  onStage?.call('Carregando suas preferências');
   await ensureConfigInitialized(locator());
   // Before any screen reads the intake log: brings Open Food Facts rows a
   // released build wrote in raw grams into the app's units (#1152).
+  onStage?.call('Conferindo seu diário');
   await ensureOffMicronutrientsRepaired(hiveDBProvider);
   // Before Diary and Trends read the day rows: brings each in line with
   // the entries the Diary lists on its day (#1317), then rebuilds any
