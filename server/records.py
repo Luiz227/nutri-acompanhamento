@@ -173,11 +173,8 @@ class Records:
                     n = record['nutrition']
                     def value(key, unit):
                         return f"{n[key]:.1f}".replace('.', ',') + ' ' + unit if n.get(key) is not None else 'valor não disponível'
-                    paragraphs.append(f"Essa porção tem cerca de {value('energyKcal','kcal')}, com {value('proteinG','g de proteína')}, {value('carbsG','g de carboidratos')} e {value('fatG','g de gordura')}.")
-                    if record.get('estimated'):
-                        paragraphs.append(f"É uma estimativa: usei {record['foodName']} como referência próxima ({record['source']}).")
-                    elif record.get('source', '').startswith('Open Food Facts'):
-                        paragraphs.append('Usei os dados do rótulo no Open Food Facts.')
+                    prefix = 'Para essa porção, estimei ' if record.get('estimated') else 'Essa porção tem cerca de '
+                    paragraphs.append(prefix + f"{value('energyKcal','kcal')}, com {value('proteinG','g de proteína')}, {value('carbsG','g de carboidratos')} e {value('fatG','g de gordura')}.")
                 else:
                     paragraphs.append('Guardei como anotação, mas ainda não tenho uma referência nutricional compatível. Se for um produto de mercado, pode mandar o código de barras para eu consultar o rótulo.')
             elif record['kind'] == 'weight':

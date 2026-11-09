@@ -37,3 +37,7 @@ Um backup privado deles é necessário para futuras atualizações do APK.
 ## v0.4.0-teste.1
 
 48 testes do servidor, 22 do workflow e 7 testes Flutter específicos aprovados. Cobrem registro automático sem prompt de confirmação, macros determinísticos, aproximação identificada sem trocar comum por integral, fonte externa simulada e sódio convertido para mg, convite único e autorização para sugestões, bloqueio terapêutico, importação OFF/estimativas e divisão por parágrafo. Consulta pública de exemplo ao Open Food Facts retornou HTTP 200 com nutrientes; não houve envio de dados de paciente. Não foi executado ciclo real no n8n/Evolution nem chamada paga ao modelo nesta verificação.
+
+## v0.4.1-teste.1
+
+15 testes Flutter específicos aprovados, incluindo 4 novos de inicialização e os testes de privacidade dos relatórios. Análise Flutter sem problemas; 48 testes de servidor aprovados após simplificar os avisos de estimativa. O placeholder de relatórios vazio entre aspas foi confirmado sem imprimir o valor de credenciais. Nenhum dispositivo Android estava conectado; a validação física de reabertura permanece necessária após atualizar sem desinstalar.

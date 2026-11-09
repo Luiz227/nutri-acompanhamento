@@ -19,6 +19,7 @@ import 'package:opennutritracker/core/presentation/widgets/keyboard_dismisser.da
 import 'package:opennutritracker/core/styles/app_palette.dart';
 import 'package:opennutritracker/core/styles/app_theme.dart';
 import 'package:opennutritracker/core/utils/app_locale_service.dart';
+import 'package:opennutritracker/core/utils/app_startup_reporting.dart';
 import 'package:opennutritracker/core/utils/app_locale_sync.dart';
 import 'package:opennutritracker/core/utils/daily_reminder_scheduler.dart';
 import 'package:opennutritracker/core/utils/widget/calorie_widget_writer.dart';
@@ -152,7 +153,7 @@ Future<void> _bootstrapApp() async {
   // sentry enabled, else run without it
   if (kReleaseMode && hasAcceptedAnonymousData) {
     log.info('Starting App with Sentry enabled ...');
-    _runAppWithSentryReporting(
+    await _runAppWithSentryReporting(
       isUserInitialized,
       savedAppTheme,
       savedLocale,
@@ -173,7 +174,7 @@ Future<void> _bootstrapApp() async {
   }
 }
 
-void _runAppWithSentryReporting(
+Future<void> _runAppWithSentryReporting(
   bool isUserInitialized,
   AppThemeEntity savedAppTheme,
   Locale? savedLocale,
@@ -181,9 +182,17 @@ void _runAppWithSentryReporting(
   bool savedUseMaterialYou,
   int? savedAccentColor,
 ) async {
-  await SentryFlutter.init(
-    (options) => configureSentryOptions(options, dsn: Env.sentryDns),
-    appRunner: () => runAppWithChangeNotifiers(
+  await startWithOptionalReporting(
+    enabled: true,
+    dsn: Env.sentryDns,
+    initialize: (dsn, launch) => SentryFlutter.init(
+      (options) => configureSentryOptions(options, dsn: dsn),
+      appRunner: launch,
+    ),
+    onUnavailable: () => Logger(
+      'main',
+    ).warning('Relatórios opcionais indisponíveis; abrindo o aplicativo.'),
+    runApplication: () => runAppWithChangeNotifiers(
       isUserInitialized,
       savedAppTheme,
       savedLocale,

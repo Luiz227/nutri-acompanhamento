@@ -41,7 +41,9 @@ class NaturalTests(unittest.TestCase):
 
     def test_compatible_approximation_is_identified_and_preserves_original_food(self):
         result=self.automatic({'kind':'meal','text':'pão de forma comum','quantity':50,'unit':'g','mealType':'breakfast'})
-        self.assertIn('estimativa',result['text'])
+        self.assertIn('estimei',result['text'])
+        self.assertNotIn('referência próxima',result['text'])
+        self.assertNotIn('TACO',result['text'])
         record=self.store.records.list(self.patient['id'])['records'][0]
         self.assertTrue(record['estimated'])
         self.assertEqual(record['text'],'pão de forma comum')
@@ -56,7 +58,8 @@ class NaturalTests(unittest.TestCase):
         self.assertEqual(record['foodCode'],'off:12345678')
         self.assertEqual(record['nutrition']['energyKcal'],100)
         self.assertEqual(record['nutrientsPer100g']['sodium_100'],500)
-        self.assertIn('Open Food Facts',result['text'])
+        self.assertEqual(record['source'],'Open Food Facts (ODbL)')
+        self.assertNotIn('Open Food Facts',result['text'])
         self.assertIsNone(self.store.records.products.product('https://example.com'))
 
     def test_menu_requires_permission_collects_preferences_and_does_not_repeat_offer(self):

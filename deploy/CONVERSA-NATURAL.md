@@ -44,3 +44,14 @@ https://www.gov.br/saude/pt-br/composicao/saps/promocao-da-saude/guias-alimentar
 7. Não compartilhe chaves ou execuções com cabeçalhos secretos. Eventos já processados não são enviados novamente ao reexecutar uma execução antiga.
 
 Os registros antigos não são reprocessados nem corrigidos automaticamente. A edição remota de registros existentes continua fora desta versão. A API deve permanecer com uma réplica; os lembretes e o SQLite persistem no volume.
+
+
+## Correção 0.4.1: reabertura do APK e aviso de aproximação
+
+A mensagem de registro deixou de expor nomes técnicos da TACO/UNICAMP ou da referência escolhida. Quando houver aproximação, os macros são apresentados como estimados ("Para essa porção, estimei..."). A referência, a fonte e a indicação de estimativa permanecem nos dados e nos detalhes do aplicativo.
+
+O inicializador agora ignora configuração vazia/inválida do serviço opcional de relatórios de erro, limita a espera desse serviço a cinco segundos e continua abrindo o app se o serviço falhar. Um callback tardio não monta o app duas vezes. A investigação identificou um placeholder vazio entre aspas no build anterior, incompatível com a inicialização desse SDK quando a coleta de erros estava habilitada após o cadastro.
+
+Não foi alterada a chave do Hive, não houve limpeza do armazenamento e não se solicita desinstalação. Instale o APK novo sobre o anterior. Para o ajuste das mensagens, implante a nutri-api novamente. O fluxo n8n continua o da versão 0.4; não precisa reimportar por causa deste patch.
+
+A correção tem teste de regressão de primeira abertura e reabertura com consentimento, configuração inválida, falha do plugin, timeout e callback tardio. Não foi validada diretamente no Galaxy do usuário, pois não há dispositivo conectado nesta estação. Se o sintoma persistir após atualizar, serão necessários logs do aparelho para identificar outra etapa da inicialização.
