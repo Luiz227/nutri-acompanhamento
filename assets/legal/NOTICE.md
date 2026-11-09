@@ -36,3 +36,5 @@ LICENSE e este aviso, sob GPLv3, pelo mesmo local de download. Não basta aponta
 somente para o projeto original. Não publique senhas, certificados de assinatura,
 tokens nem dados dos usuários. Uma versão privada precisa fornecer a fonte aos
 destinatários do APK por outro meio acessível, sem impedir seus direitos GPL.
+
+Versão 0.4: registro automático pelo WhatsApp, resumo conversacional e estimativas identificadas; integração de rótulos Open Food Facts (https://world.openfoodfacts.org), base sob Open Database License (ODbL), https://opendatacommons.org/licenses/odbl/1-0/. Não redistribuímos uma cópia da base; cada produto consultado mantém código, origem e URL. Sugestões gerais referenciam o Guia Alimentar para a População Brasileira, Ministério da Saúde (2014).

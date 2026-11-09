@@ -1,5 +1,7 @@
 # Cadastro no aplicativo, atendimento pelo WhatsApp
 
+**Versão atual 0.4 / API v5:** o registro agora é automático, sem confirmação. A apresentação, as fontes e as sugestões foram atualizadas. Consulte [Conversa natural](CONVERSA-NATURAL.md); seções históricas abaixo descrevem versões anteriores.
+
 ## Para o usuário
 
 1. Instala o APK e preenche seu cadastro.

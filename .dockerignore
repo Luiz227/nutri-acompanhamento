@@ -4,6 +4,8 @@
 !server/records.py
 !server/coaching.py
 !server/messaging.py
+!server/nutrition_sources.py
+!server/menu_coach.py
 !assets/
 !assets/data/
 !assets/data/taco_4ed.json

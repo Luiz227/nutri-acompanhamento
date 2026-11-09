@@ -44,3 +44,5 @@ os logs dos outros fornecedores.
 Use dados fictícios e seu próprio número na validação inicial.
 
 A versão 0.3 também guarda o nome de preferência, estado das perguntas iniciais, autorização específica, horários e controle de envio de lembretes de água. O paciente pode responder NÃO, PARAR LEMBRETES ou SAIR; o diário confirmado recente e a preferência de nome são enviados ao provedor de IA para continuidade da conversa.
+
+Na versão 0.4, o consumo informado com dados suficientes é registrado automaticamente, sem confirmação manual. A pessoa pode aceitar uma coleta adicional de idade adulta, objetivo/atividade, restrições/saúde e rotina/preferências para receber sugestões gerais; esses dados persistem no SQLite e são enviados ao provedor de IA. Consultas ao Open Food Facts enviam somente códigos de barras, sem identificadores de paciente. Produtos têm cache local com origem e código; registros derivados conservam a atribuição e estimativas são identificadas.

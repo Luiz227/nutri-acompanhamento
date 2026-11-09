@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 from records import Records
 from coaching import Coaching
 from messaging import Messaging
+from menu_coach import MenuCoach, MENU_READY
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
 
@@ -66,6 +67,7 @@ class Store:
         self.records = Records(self.db)
         self.coaching = Coaching(self.db)
         self.messaging = Messaging(self)
+        self.menu = MenuCoach(self.db)
 
     def enroll(self, body):
         phone = re.sub(r'[\s()+.-]', '', str(body.get('phone', '')))
@@ -215,7 +217,19 @@ class Store:
                             self.db.execute('UPDATE patients SET attempts=attempts+1 WHERE phone=? AND verified=0', (phone,))
                         return {'action': 'ignore'}
                     action, optout = 'assistant', False
+                    before_coaching = self.coaching.get(p['id'])
                     coaching_reply = self.coaching.handle(p['id'], text) if text.upper() not in ('CONFIRMAR', 'CANCELAR REGISTRO') else None
+                    if coaching_reply and before_coaching and before_coaching['stage'] == 'reminders' and self.coaching.get(p['id'])['stage'] == 'done':
+                        invitation = self.menu.offer(p['id'])
+                        if invitation:
+                            coaching_reply += '\n\n' + invitation
+                    if coaching_reply is None:
+                        menu_reply = self.menu.handle(p['id'], text)
+                        if menu_reply == MENU_READY:
+                            text = 'Quero sugestões gerais e flexíveis de refeições para minha rotina, usando o objetivo, as restrições e as preferências que acabei de informar.'
+                        else:
+                            coaching_reply = menu_reply
+
                     if text.upper() in ('CONFIRMAR', 'CANCELAR REGISTRO'):
                         action, text = 'reply', self.records.confirm(p['id'], text.upper() == 'CONFIRMAR')
                     elif coaching_reply is not None:
@@ -244,6 +258,9 @@ class Store:
         recent = self.db.execute("SELECT payload FROM records WHERE patient_id=? AND status='confirmed' ORDER BY seq DESC LIMIT 12", (p['id'],)).fetchall() if p['verified'] else []
         if recent:
             context['recentDiarySummary'] = json.dumps([{k: v for k, v in json.loads(r['payload']).items() if k in ('kind', 'text', 'quantity', 'unit', 'occurredAt', 'mealType')} for r in reversed(recent)], ensure_ascii=False)
+        menu_profile = self.menu.get(p['id']) if p['verified'] else None
+        if menu_profile:
+            context['menuPreferences'] = json.dumps(menu_profile, ensure_ascii=False)
         return {'eventId': event_id, 'userId': p['id'], 'phone': p['phone'], 'action': action,
                 'verified': bool(p['verified']), 'consentActive': bool(p['consent']),
                 'optOutPersisted': optout, 'text': text, 'message': text,
@@ -283,7 +300,12 @@ class Store:
                     text = candidate.strip() if self.allow_ai and isinstance(candidate, str) and 0 < len(candidate.strip()) <= 1800 else PILOT_REPLY
                     if self.allow_ai and body.get('record') is not None:
                         try:
-                            text = self.records.propose(p['id'], event['id'], body['record'])
+                            text = self.records.propose(p['id'], event['id'], body['record'], auto_save=True)
+                            items = body['record'] if isinstance(body['record'], list) else [body['record']]
+                            if any(isinstance(r, dict) and r.get('kind') == 'meal' for r in items) and len(text) < 1640:
+                                invitation = self.menu.offer(p['id'])
+                                if invitation:
+                                    text += '\n\n' + invitation
                         except (ValueError, TypeError, OverflowError):
                             text = 'Antes de registrar, preciso confirmar os dados: refeições em gramas, água em ml/l, peso em kg/g, ou o texto da observação. Pode informar novamente?'
                 elif event['action'] == 'reply':
@@ -378,7 +400,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 4, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 5, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}

@@ -14,6 +14,9 @@ import 'package:opennutritracker/core/domain/entity/intake_type_entity.dart';
 import 'package:opennutritracker/core/domain/entity/water_intake_entity.dart';
 import 'package:opennutritracker/core/domain/entity/weight_log_entity.dart';
 import 'package:opennutritracker/features/add_meal/data/data_sources/taco_food_data_source.dart';
+import 'package:opennutritracker/features/add_meal/data/dto/sp/sp_food_dto.dart';
+import 'package:opennutritracker/features/add_meal/domain/entity/meal_entity.dart';
+import 'package:opennutritracker/features/add_meal/domain/entity/meal_nutriments_entity.dart';
 import 'package:opennutritracker/features/whatsapp/nutri_bridge_client.dart';
 
 class BridgeSession {
@@ -250,7 +253,46 @@ class BridgeSession {
       final matches = (await _taco.foods()).where(
         (f) => f.code == record['foodCode'],
       );
-      if (!sameProfile || matches.length != 1) return;
+      if (!sameProfile) return;
+      MealEntity? food = matches.length == 1 ? matches.single : null;
+      if ((record['foodCode'] as String).startsWith('off:') ||
+          record['estimated'] == true) {
+        final raw = record['nutrientsPer100g'];
+        if (raw is! Map) return;
+        final nutrients = Map<String, dynamic>.from(raw);
+        for (final value in nutrients.values) {
+          if (value != null &&
+              (value is! num || !value.isFinite || value < 0)) {
+            return;
+          }
+        }
+        if (nutrients['energy_kcal_100'] is! num ||
+            nutrients['energy_kcal_100'] > 950) {
+          return;
+        }
+        final external = (record['foodCode'] as String).startsWith('off:');
+        food = MealEntity(
+          code: record['foodCode'] as String,
+          name: record['estimated'] == true
+              ? '${record['text']} (estimativa)'
+              : record['foodName'] as String?,
+          url: external
+              ? 'https://world.openfoodfacts.org/product/${(record['foodCode'] as String).substring(4)}'
+              : food?.url,
+          mealQuantity: null,
+          mealUnit: 'g',
+          servingQuantity: null,
+          servingUnit: 'g',
+          servingSize: null,
+          nutriments: MealNutrimentsEntity.fromSpFoodSummary(
+            SpFoodDTO.fromJson(nutrients),
+          ),
+          source: external ? MealSourceEntity.off : MealSourceEntity.fdc,
+          backendSource: external ? null : food?.backendSource,
+          detailed: true,
+        );
+      }
+      if (food == null) return;
       final hour = date.hour;
       final inferred = hour < 11
           ? IntakeTypeEntity.breakfast
@@ -272,7 +314,7 @@ class BridgeSession {
           unit: 'g',
           amount: amount,
           type: type,
-          meal: matches.single,
+          meal: food,
           dateTime: date,
         ),
       );

@@ -14,8 +14,7 @@ class RecordTests(unittest.TestCase):
 
     def propose(self, raw, event_id='record-message-10'):
         job = self.store.ingest(self.event('Quero registrar', event_id), 'nutri')
-        return self.store.reserve({'eventId': job['eventId'], 'userId': job['userId'],
-            'phone': job['phone'], 'candidate': 'Vou conferir.', 'record': raw}, 'nutri')
+        return {'text': self.store.records.propose(job['userId'], job['eventId'], raw, auto_save=False)}
 
     def test_only_confirmed_records_are_visible_and_confirmation_is_idempotent(self):
         draft = self.propose({'kind': 'water', 'text': 'Água', 'quantity': .5, 'unit': 'l'})

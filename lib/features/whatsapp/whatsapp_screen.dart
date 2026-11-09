@@ -215,7 +215,7 @@ class _WhatsappScreenState extends State<WhatsappScreen>
             if (record['nutrition'] is Map &&
                 record['nutrition']['energyKcal'] is num)
               Text(
-                '${(record['nutrition']['energyKcal'] as num).toStringAsFixed(1)} kcal (TACO)',
+                '${(record['nutrition']['energyKcal'] as num).toStringAsFixed(1)} kcal',
               ),
             if (record['quantity'] != null)
               Text('${record['quantity']} ${record['unit']}'),
@@ -223,8 +223,12 @@ class _WhatsappScreenState extends State<WhatsappScreen>
               const Text(
                 'Cálculo nutricional pendente: alimento não identificado com precisão.',
               ),
-            if (record['foodCode'] != null)
-              const Text('TACO/NEPA/UNICAMP — refletido no diário alimentar.'),
+            if (record['estimated'] == true)
+              Text('Estimativa com referência em ${record['foodName']}.'),
+            if (record['foodCode'] != null && record['estimated'] != true)
+              Text(
+                '${record['source'] ?? 'Tabela nutricional'} · registrado no diário.',
+              ),
           ],
         ),
       ),

@@ -66,12 +66,12 @@ class Coaching:
                 return self.question(json.loads(p['hours']))
             accepted = command in ('sim', 'autorizo', 'sim autorizo', 'pode sim', 'sim pode', 'sim pode mandar', 'pode mandar')
             self.db.execute("UPDATE coaching SET stage='done',reminders=?,consent_at=?,updated=? WHERE patient_id=?", (int(accepted), datetime.now(timezone.utc).isoformat(), time.time(), patient_id))
-            return ('Combinado! Vou lembrar você de beber água às ' + ', '.join(json.loads(p['hours'])) + ' (Brasília). Para mudar, envie ALTERAR LEMBRETES; para cancelar, PARAR LEMBRETES. ' if accepted else 'Sem problemas, não vou enviar lembretes. ') + 'Agora me conte: o que você gostaria de registrar ou conversar sobre sua alimentação?'
+            return ('Combinado! Vou lembrar você de beber água às ' + ', '.join(json.loads(p['hours'])) + '. ' if accepted else 'Sem problemas, não vou enviar lembretes. ') + 'Pode me contar o que comeu ou bebeu que eu registro por aqui.'
         return None
 
     @staticmethod
     def question(hours=None):
-        return 'Posso enviar lembretes para beber água às ' + ', '.join(hours or DEFAULT_HOURS) + ' (horário de Brasília)? Responda SIM ou NÃO. São lembretes gerais, sem meta de quantidade; se você tem restrição de líquidos, siga a orientação do seu profissional.'
+        return 'Posso enviar lembretes para beber água às ' + ', '.join(hours or DEFAULT_HOURS) + '? Os horários seguem Brasília. Pode responder sim ou não.'
 
     def schedule(self, now=None):
         now = now or datetime.now(timezone.utc)
@@ -98,4 +98,4 @@ class Coaching:
         if not row or not p or not p['reminders'] or now - row['created'] > 600:
             return None
         name = f", {p['name']}" if p['name'] else ''
-        return f'Oi{name}! Passando para lembrar da água, se estiver de acordo com a orientação do seu profissional. Se beber, me conte a quantidade em ml para registrar. Para cancelar estes lembretes, envie PARAR LEMBRETES.'
+        return f'Oi{name}! Uma pausa para lembrar da água. 💧 Se beber, pode me contar a quantidade que eu anoto.'

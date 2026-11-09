@@ -1,0 +1,46 @@
+# Atualização 0.4: conversa natural e registro automático
+
+## O que mudou
+
+Refeições, água, peso e observações com dados suficientes são salvos automaticamente. Não é mais necessário responder CONFIRMAR. O aplicativo mantém o status interno confirmed por compatibilidade de sincronização; isso não implica confirmação manual.
+
+As respostas de registro não mostram data, fuso, enumeração técnica, travessões de separação ou instruções repetidas de cancelamento. O resumo mostra kcal, proteína, carboidratos e gordura por alimento e total da refeição. Informações ausentes não são tratadas como zero.
+
+Cada parágrafo vira uma bolha no WhatsApp, mesmo quando a resposta completa é curta. As partes têm até 420 caracteres e pausa de 2 segundos; mensagens comuns recebidas continuam sendo agrupadas por 8 segundos de silêncio. Códigos e comandos mantêm tratamento imediato.
+
+## Alimentos, fontes e aproximações
+
+1. Nomes exatos, sinônimos revisados e ordem de palavras são procurados na TACO local.
+2. Produtos com código de barras informado pelo paciente podem ser consultados no Open Food Facts. A consulta externa recebe somente o código do produto, sem nome, telefone ou contexto do paciente. Há timeout de 5 segundos, cache de 24 horas e limite local de 10 consultas por minuto. O serviço público pode ficar indisponível.
+3. Quando não há correspondência exata, pode ser usada uma referência próxima da mesma família alimentar, preservando os qualificadores de preparo disponíveis. A resposta e o aplicativo identificam expressamente a estimativa e a referência utilizada. O nome original do usuário é preservado.
+4. Não se aproxima entre famílias sem relação, não se troca comum por integral e não se escolhe cru/grelhado para frango sem esclarecer o preparo. Se não houver aproximação compatível, fica uma anotação sem cálculo e é solicitada informação adicional. Não se inventam calorias.
+
+Não há acesso automático a todas as tabelas nutricionais do mundo. Nesta versão, as fontes efetivamente integradas ao WhatsApp são TACO e Open Food Facts por código de barras. TBCA, USDA e outras fontes não estão integradas a esse agente. Dados do Open Food Facts são colaborativos, sob ODbL, não uma garantia de rótulo correto ou de ausência de alérgenos.
+
+Referências técnicas e de atribuição:
+- https://openfoodfacts.github.io/openfoodfacts-server/api/
+- https://openfoodfacts.github.io/openfoodfacts-server/api/ref-cheatsheet/
+- https://opendatacommons.org/licenses/odbl/1-0/
+
+## Sugestões de alimentação
+
+A assistente oferece sugestões uma vez no início ou após um registro alimentar. A pessoa também pode pedir uma sugestão de cardápio. Sem interesse, o diário continua normalmente.
+
+Após aceitar, são coletados: idade adulta, objetivo e atividade, alergias/restrições/condições de saúde e rotina/preferências/orçamento. As respostas ficam no SQLite por paciente e são disponibilizadas à IA como contexto. Só depois a solicitação é enviada ao modelo.
+
+A geração é de um exemplo flexível de refeições para adultos, considerando as informações autodeclaradas. Não calcula necessidade energética clínica, déficit ou metas de emagrecimento. Não substitui avaliação profissional, nem gera dietas terapêuticas para diabetes, doença renal, gestação/lactação, transtornos alimentares ou menores. Sugestões nunca são inseridas no diário como se tivessem sido consumidas.
+
+Referência para orientações gerais: Guia Alimentar para a População Brasileira, Ministério da Saúde (2014):
+https://www.gov.br/saude/pt-br/composicao/saps/promocao-da-saude/guias-alimentares/guias-alimentares
+
+## Implantar
+
+1. No Easypanel, mantenha o volume /data e as variáveis existentes. Implante a nutri-api a partir do ramo main. /healthz deve informar apiVersion 5 e mode general-ai.
+2. Desative o fluxo antigo no n8n. Importe Nutri-v0.4-configurado.json, confira as credenciais selecionadas e publique. As referências de credenciais foram preservadas a partir do último arquivo enviado; os valores não estão no JSON. A credencial OpenAI é a nativa.
+3. Atualize o APK sem desinstalar. No Galaxy A03s do teste, use ARM32. O APK novo importa produtos externos no diário e mostra o nome original com indicação de estimativa. APK antigo continua importando TACO, mas não esses produtos externos.
+4. Teste água: envie “bebi 500 ml de água”. Deve salvar sem CONFIRMAR e responder brevemente.
+5. Teste alimentação: envie alimento, peso e categoria, por exemplo “no almoço comi 100 g de peito de frango sem pele grelhado”. Deve salvar e mostrar os macros em bolhas separadas.
+6. Teste sugestões: aceite a pergunta, responda a coleta e confira que a resposta respeita as preferências. Teste também NÃO e situações que exigem profissional.
+7. Não compartilhe chaves ou execuções com cabeçalhos secretos. Eventos já processados não são enviados novamente ao reexecutar uma execução antiga.
+
+Os registros antigos não são reprocessados nem corrigidos automaticamente. A edição remota de registros existentes continua fora desta versão. A API deve permanecer com uma réplica; os lembretes e o SQLite persistem no volume.

@@ -6,20 +6,28 @@ import time
 import uuid
 
 
-def split_message(text, limit=700):
+def split_message(text, limit=420):
     parts = []
-    while len(text) > limit:
-        cut = text.rfind('\n\n', 0, limit + 1)
-        if cut < limit // 3:
-            cut = text.rfind('\n', 0, limit + 1)
-        if cut < limit // 3:
-            cut = text.rfind(' ', 0, limit + 1)
-        if cut < limit // 3:
-            cut = limit
-        parts.append(text[:cut].rstrip())
-        text = text[cut:].lstrip()
-    if text:
-        parts.append(text)
+    # A paragraph is a conversational bubble, even when the total is short.
+    for paragraph in re.split(r'\n\s*\n', text.strip()):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        while len(paragraph) > limit:
+            cut = paragraph.rfind('. ', 0, limit)
+            if cut >= limit // 3:
+                cut += 1
+            else:
+                cut = paragraph.rfind(' ', 0, limit + 1)
+            if cut < limit // 3:
+                cut = limit
+            parts.append(paragraph[:cut].rstrip())
+            paragraph = paragraph[cut:].lstrip()
+        if paragraph:
+            parts.append(paragraph)
+    # The model and deterministic formatter retain the 1800-char total limit.
+    if len(parts) > 10:
+        return split_message(text.replace('\n\n', ' '), limit)
     return parts
 
 

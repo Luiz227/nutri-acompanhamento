@@ -33,3 +33,7 @@ Um backup privado deles é necessário para futuras atualizações do APK.
 ## Agrupador e quebrador de mensagens
 
 38 testes de servidor e 22 testes de workflow aprovados. Cobrem união de mensagens concorrentes, isolamento entre pacientes, SAIR durante a espera, partes ordenadas e não repetidas, interrupção após falha e simulação do loop com duas partes. Não foi executado envio real no n8n/Evolution; o teste de ponta a ponta depende da implantação pelo operador.
+
+## v0.4.0-teste.1
+
+48 testes do servidor, 22 do workflow e 7 testes Flutter específicos aprovados. Cobrem registro automático sem prompt de confirmação, macros determinísticos, aproximação identificada sem trocar comum por integral, fonte externa simulada e sódio convertido para mg, convite único e autorização para sugestões, bloqueio terapêutico, importação OFF/estimativas e divisão por parágrafo. Consulta pública de exemplo ao Open Food Facts retornou HTTP 200 com nutrientes; não houve envio de dados de paciente. Não foi executado ciclo real no n8n/Evolution nem chamada paga ao modelo nesta verificação.

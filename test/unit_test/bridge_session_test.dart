@@ -53,6 +53,93 @@ void main() {
   tearDown(() async => locator.reset());
 
   test(
+    'external product and approximate food import with source and estimate labels',
+    () async {
+      final intakes = _Intakes();
+      locator.registerSingleton<IntakeRepository>(intakes);
+      await const FlutterSecureStorage().write(
+        key: 'nutri-bridge-v1:one',
+        value: jsonEncode({
+          'token': 'test-token',
+          'url': 'https://nutri.example',
+          'cursor': 0,
+          'records': [],
+        }),
+      );
+      final session = BridgeSession(
+        'one',
+        onError: (error, stack) => fail('$error\n$stack'),
+        createClient: (url) => NutriBridgeClient(
+          url,
+          client: MockClient((request) async {
+            if (request.url.path == '/api/v1/me') {
+              return http.Response(
+                '{"verified":true,"consentActive":true}',
+                200,
+              );
+            }
+            return http.Response(
+              jsonEncode({
+                'records': request.url.queryParameters['after'] == '0'
+                    ? [
+                        {
+                          'id': 'external-1',
+                          'seq': 1,
+                          'kind': 'meal',
+                          'text': 'Produto exemplo',
+                          'foodName': 'Produto exemplo',
+                          'foodCode': 'off:12345678',
+                          'quantity': 40,
+                          'unit': 'g',
+                          'mealType': 'snack',
+                          'occurredAt': '2026-11-09T12:00:00Z',
+                          'nutrientsPer100g': {
+                            'energy_kcal_100': 250,
+                            'proteins_100': 10,
+                            'carbohydrates_100': 30,
+                            'fat_100': 10,
+                          },
+                        },
+                        {
+                          'id': 'estimate-2',
+                          'seq': 2,
+                          'kind': 'meal',
+                          'text': 'Pão de forma comum',
+                          'foodName': 'Pão, trigo, francês',
+                          'foodCode': 'taco:53',
+                          'estimated': true,
+                          'quantity': 50,
+                          'unit': 'g',
+                          'mealType': 'breakfast',
+                          'occurredAt': '2026-11-09T12:00:00Z',
+                          'nutrientsPer100g': {
+                            'energy_kcal_100': 300,
+                            'proteins_100': 8,
+                            'carbohydrates_100': 55,
+                            'fat_100': 3,
+                          },
+                        },
+                      ]
+                    : [],
+                'nextCursor': 2,
+                'hasMore': false,
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }),
+        ),
+      );
+      await session.synchronize();
+      expect(intakes.entries, hasLength(2));
+      expect(intakes.entries.first.totalKcal, closeTo(100, .01));
+      expect(intakes.entries.first.meal.url, contains('openfoodfacts.org'));
+      expect(intakes.entries.last.meal.name, contains('estimativa'));
+      expect(intakes.entries.last.type, IntakeTypeEntity.breakfast);
+    },
+  );
+
+  test(
     'breakfast reported at night imports into breakfast with TACO nutrients once',
     () async {
       final intakes = _Intakes();

@@ -78,3 +78,7 @@ endereços e credenciais e não são publicados pelo ato de criar este repositó
 ### Atualização 0.3 de teste
 
 Conversa com nome e preferências persistentes, lembretes de água por autorização expressa e resumo nutricional determinístico por porção. APK novo respeita a categoria relatada pelo WhatsApp. Guia: [fluxo e limites](deploy/FLUXO-WHATSAPP.md).
+
+### Atualização 0.4
+
+Registro automático, conversa em bolhas curtas, macros por alimento, referências próximas identificadas como estimativas e produtos Open Food Facts por código de barras. Sugestões gerais após autorização e coleta de preferências. [Guia de implantação e limites](deploy/CONVERSA-NATURAL.md).
