@@ -55,3 +55,18 @@ O inicializador agora ignora configuração vazia/inválida do serviço opcional
 Não foi alterada a chave do Hive, não houve limpeza do armazenamento e não se solicita desinstalação. Instale o APK novo sobre o anterior. Para o ajuste das mensagens, implante a nutri-api novamente. O fluxo n8n continua o da versão 0.4; não precisa reimportar por causa deste patch.
 
 A correção tem teste de regressão de primeira abertura e reabertura com consentimento, configuração inválida, falha do plugin, timeout e callback tardio. Não foi validada diretamente no Galaxy do usuário, pois não há dispositivo conectado nesta estação. Se o sintoma persistir após atualizar, serão necessários logs do aparelho para identificar outra etapa da inicialização.
+
+
+## Versão 0.5: perfil e metas do aplicativo no acompanhamento
+
+O APK envia gênero informado, nascimento, altura, peso, objetivo (perder/manter/ganhar), nível de atividade e, quando definidos, peso-alvo e ritmo semanal. As metas diárias de kcal, proteína, carboidratos, gordura e água usam os mesmos serviços de cálculo/configuração da tela inicial, sem gerar outro cálculo na IA.
+
+O perfil vai no cadastro e é atualizado ao abrir/retomar o app e durante a sincronização em primeiro plano. Só há novo envio quando os dados mudam. Uma API antiga que não confirma profileUpdated não é considerada sincronizada; a tentativa é repetida sem bloquear a importação do diário. O usuário existente não precisa refazer cadastro. O app precisa ser atualizado e aberto para enviar os novos campos; o servidor não pode adivinhar gênero ou metas que nunca recebeu.
+
+A API valida e substitui o snapshot do perfil, preservando o restante do contexto. Campos removidos não ficam com valores antigos. Metas são identificadas como configuração/estimativa do app, não como plano profissional aprovado. A IA recebe o perfil estruturado e um resumo legível; o prompt prioriza esses dados sobre lembranças antigas.
+
+A coleta de sugestões pula idade, objetivo e atividade já conhecidos. Quando só uma informação falta, pergunta apenas ela. Com gênero masculino informado, a pergunta de saúde não inclui gestação/amamentação. Gênero ausente/não binário usa pergunta neutra; um relato espontâneo de condição relevante continua sendo considerado, sem inferir anatomia ou diagnósticos pelo gênero.
+
+Implante a nutri-api (healthz apiVersion 6), importe o fluxo 0.5 e selecione as credenciais existentes, e atualize o APK sem desinstalar. Não limpe o volume nem os dados locais. Depois abra o app para sincronizar antes de testar perguntas sobre objetivo/metas no WhatsApp.
+
+PDF personalizado é uma possibilidade futura; esta versão não gera nem envia PDF. O perfil sincronizado é a base para um documento com nome, objetivo, metas e preferências reais. Um plano clínico individual precisa de definição/revisão profissional antes da emissão; um cardápio geral deve ser identificado como sugestão.

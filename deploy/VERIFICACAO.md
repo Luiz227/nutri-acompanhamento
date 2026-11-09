@@ -41,3 +41,7 @@ Um backup privado deles é necessário para futuras atualizações do APK.
 ## v0.4.1-teste.1
 
 15 testes Flutter específicos aprovados, incluindo 4 novos de inicialização e os testes de privacidade dos relatórios. Análise Flutter sem problemas; 48 testes de servidor aprovados após simplificar os avisos de estimativa. O placeholder de relatórios vazio entre aspas foi confirmado sem imprimir o valor de credenciais. Nenhum dispositivo Android estava conectado; a validação física de reabertura permanece necessária após atualizar sem desinstalar.
+
+## v0.5.0-teste.1
+
+54 testes de servidor, 23 de workflow e 12 testes Flutter específicos aprovados, incluindo reabertura, atualização de metas, retry em API antiga sem confirmação, perfil masculino sem pergunta de amamentação, idade conhecida sem repetição e preservação de dados de contexto. Análise Flutter sem problemas. Não foi feito teste físico no Galaxy nem conversa real paga com o modelo nesta verificação.

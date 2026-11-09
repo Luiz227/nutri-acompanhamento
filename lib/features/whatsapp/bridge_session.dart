@@ -9,6 +9,11 @@ import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/data/repository/intake_repository.dart';
 import 'package:opennutritracker/core/data/repository/water_intake_repository.dart';
 import 'package:opennutritracker/core/data/repository/weight_log_repository.dart';
+import 'package:opennutritracker/core/data/repository/user_repository.dart';
+import 'package:opennutritracker/core/data/repository/config_repository.dart';
+import 'package:opennutritracker/core/domain/entity/user_entity.dart';
+import 'package:opennutritracker/core/domain/usecase/get_kcal_goal_usecase.dart';
+import 'package:opennutritracker/core/domain/usecase/get_macro_goal_usecase.dart';
 import 'package:opennutritracker/core/domain/entity/intake_entity.dart';
 import 'package:opennutritracker/core/domain/entity/intake_type_entity.dart';
 import 'package:opennutritracker/core/domain/entity/water_intake_entity.dart';
@@ -28,14 +33,58 @@ class BridgeSession {
   final Future<String> Function() resolveUrl;
   final NutriBridgeClient Function(String) createClient;
   final void Function(Object, StackTrace)? onError;
+  final Future<Map<String, dynamic>> Function() readProfile;
   BridgeSession(
     this.profileId, {
     this.storage = const FlutterSecureStorage(),
     Future<String> Function()? resolveUrl,
     NutriBridgeClient Function(String)? createClient,
+    Future<Map<String, dynamic>> Function()? readProfile,
     this.onError,
   }) : resolveUrl = resolveUrl ?? resolveBaseUrl,
+       readProfile = readProfile ?? readAppProfile,
        createClient = createClient ?? ((url) => NutriBridgeClient(url));
+
+  static Map<String, dynamic> profileOf(UserEntity user) => {
+    'birthday': user.birthday.toIso8601String().substring(0, 10),
+    'heightCm': user.heightCM,
+    'weightKg': user.weightKG,
+    'gender': user.gender.name,
+    'goal': user.goal.name,
+    'activityLevel': user.pal.name,
+    'targetWeightKg': user.targetWeightKg,
+    'weeklyWeightGoalKg': user.weeklyWeightGoalKg,
+  };
+
+  static Future<Map<String, dynamic>> readAppProfile() async {
+    if (!locator.isRegistered<UserRepository>()) return {};
+    final repo = locator<UserRepository>();
+    if (!await repo.hasUserData()) return {};
+    final user = await repo.getUserData();
+    final profile = profileOf(user);
+    if (locator.isRegistered<GetKcalGoalUsecase>() &&
+        locator.isRegistered<GetMacroGoalUsecase>() &&
+        locator.isRegistered<ConfigRepository>()) {
+      final kcal = await locator<GetKcalGoalUsecase>().getKcalGoal(
+        userEntity: user,
+      );
+      if (kcal.isFinite && kcal > 0) {
+        final macros = locator<GetMacroGoalUsecase>();
+        final config = await locator<ConfigRepository>().getConfig();
+        profile['dailyGoals'] = {
+          'energyKcal': kcal,
+          'proteinG': await macros.getProteinsGoal(kcal),
+          'carbsG': await macros.getCarbsGoal(kcal),
+          'fatG': await macros.getFatsGoal(kcal),
+          'waterMl': config.effectiveDailyWaterGoalMl(
+            user.gender,
+            caloriesProfile: user.caloriesProfile,
+          ),
+        };
+      }
+    }
+    return profile;
+  }
 
   factory BridgeSession.current() =>
       BridgeSession(locator<HiveDBProvider>().activeProfileId);
@@ -119,7 +168,15 @@ class BridgeSession {
     if (state.isEmpty) return;
     NutriBridgeClient? client;
     try {
+      Map<String, dynamic> currentProfile = {};
+      try {
+        currentProfile = await readProfile();
+      } catch (_) {
+        // A profile read must not block local tracking or import of existing records.
+      }
+      if (!sameProfile) return;
       if (state['pending'] == true) {
+        if (currentProfile.isNotEmpty) state['profile'] = currentProfile;
         final url = await resolveUrl();
         client = createClient(url);
         final result = await client.request(
@@ -166,6 +223,24 @@ class BridgeSession {
         'active': me['consentActive'] == true,
         'verified': me['verified'] == true,
       });
+      if (state['active'] == true && currentProfile.isNotEmpty && sameProfile) {
+        final encoded = jsonEncode(currentProfile);
+        if (state['profileSynced'] != encoded) {
+          try {
+            final saved = await client.request(
+              'PUT',
+              '/api/v1/context',
+              token: state['token'] as String,
+              body: {'profile': currentProfile},
+            );
+            if (saved['profileUpdated'] == true) {
+              state['profileSynced'] = encoded;
+            }
+          } catch (_) {
+            // Retry on next foreground sync; profile updates must not block the diary.
+          }
+        }
+      }
       if (state['verified'] == true) {
         var cursor = (state['cursor'] as num?)?.toInt() ?? 0;
         var cache = List<Map<String, dynamic>>.from(

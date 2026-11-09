@@ -27,6 +27,15 @@ test('structured meal keeps explicit category and user context for deterministic
   assert.match(prompt,/Desativados/);
 });
 
+test('prompt receives the latest structured app objective, gender and daily targets', () => {
+  const prompt = makePrompt({message:'Qual minha meta?',context:{appProfile:{gender:'male',goal:'gainWeight',activityLevel:'active',dailyGoals:{energyKcal:2500,proteinG:150}}},history:[]},'model-test');
+  const text=JSON.stringify(prompt);
+  assert.match(text, /2500/);
+  assert.match(text, /gainWeight/);
+  assert.match(text, /male/);
+  assert.match(text, /Não repita perguntas sobre idade/);
+});
+
 test('accented instance is preserved and unsafe instance names are rejected', () => {
   const body = { ...inbound(), instance: 'Nutrição' };
   const event = normalizeEvolution(body);

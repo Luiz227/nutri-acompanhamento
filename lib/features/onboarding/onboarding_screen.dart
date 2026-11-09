@@ -543,15 +543,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (_whatsappConsent) {
           await BridgeSession.current().enroll(
             _whatsappPhone,
-            profile: {
-              'heightCm': userEntity.heightCM,
-              'weightKg': userEntity.weightKG,
-              'birthday': userEntity.birthday.toIso8601String().substring(
-                0,
-                10,
-              ),
-              'goal': userEntity.goal.name,
-            },
+            profile: BridgeSession.profileOf(userEntity),
           );
         }
         if (!context.mounted) return;

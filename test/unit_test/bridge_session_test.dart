@@ -53,6 +53,66 @@ void main() {
   tearDown(() async => locator.reset());
 
   test(
+    'profile and goal changes synchronize and an old API acknowledgement is retried',
+    () async {
+      await const FlutterSecureStorage().write(
+        key: 'nutri-bridge-v1:one',
+        value: jsonEncode({
+          'token': 'test-token',
+          'url': 'https://nutri.example',
+          'cursor': 0,
+          'records': [],
+        }),
+      );
+      var goal = 'gainWeight';
+      var calories = 2500;
+      var writes = 0;
+      final session = BridgeSession(
+        'one',
+        readProfile: () async => {
+          'gender': 'male',
+          'goal': goal,
+          'dailyGoals': {'energyKcal': calories},
+        },
+        createClient: (url) => NutriBridgeClient(
+          url,
+          client: MockClient((request) async {
+            if (request.method == 'PUT') {
+              writes++;
+              final profile = jsonDecode(request.body)['profile'];
+              expect(profile['gender'], 'male');
+              expect(profile['goal'], goal);
+              expect(profile['dailyGoals']['energyKcal'], calories);
+              return http.Response(
+                writes == 1
+                    ? '{"ok":true}'
+                    : '{"ok":true,"profileUpdated":true}',
+                200,
+              );
+            }
+            return http.Response(
+              '{"verified":false,"consentActive":true}',
+              200,
+            );
+          }),
+        ),
+      );
+      await session.synchronize();
+      await session.synchronize();
+      await session.synchronize();
+      expect(writes, 2);
+      goal = 'maintainWeight';
+      calories = 2200;
+      await session.synchronize();
+      expect(writes, 3);
+      expect(
+        (await session.load())['profileSynced'],
+        contains('maintainWeight'),
+      );
+    },
+  );
+
+  test(
     'external product and approximate food import with source and estimate labels',
     () async {
       final intakes = _Intakes();

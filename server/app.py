@@ -19,6 +19,7 @@ from records import Records
 from coaching import Coaching
 from messaging import Messaging
 from menu_coach import MenuCoach, MENU_READY
+from patient_profile import validate_profile, profile_context
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
 
@@ -103,18 +104,9 @@ class Store:
                 raise Problem(429, 'Limite de solicitações. Tente novamente mais tarde.')
             self.db.execute('INSERT INTO patients(id,token_hash,phone,consent,consent_at,consent_version,code_hash,code_until,created,registration_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (user_id, digest(token), phone, 1, at, version, digest(code), now + 600, now, event_id))
-            profile = body.get('profile', {})
-            if isinstance(profile, dict):
-                fields = {}
-                for name, low, high in [('heightCm', 30, 300), ('weightKg', 1, 600)]:
-                    value = profile.get(name)
-                    if isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high:
-                        fields[name] = value
-                for name in ('birthday', 'goal'):
-                    if isinstance(profile.get(name), str):
-                        fields[name] = profile[name][:60]
-                self.db.execute('UPDATE patients SET context=? WHERE id=?',
-                    (json.dumps({'profileSummary': 'Dados informados no cadastro, não são uma prescrição: ' + json.dumps(fields, ensure_ascii=False)}), user_id))
+            profile = validate_profile(body.get('profile', {}))
+            self.db.execute('UPDATE patients SET context=? WHERE id=?',
+                (json.dumps(profile_context(profile),ensure_ascii=False),user_id))
             event = {'eventId': event_id, 'userId': user_id, 'phone': phone,
                      'consent': {'granted': True, 'at': at, 'version': version}}
             self.db.execute('INSERT INTO notifications(id,body) VALUES(?,?)', (event_id, json.dumps(event)))
@@ -143,14 +135,17 @@ class Store:
         p = self.patient(token)
         if not p['consent']:
             raise Problem(403, 'A autorização de acompanhamento está cancelada.')
-        context = {}
+        context = json.loads(p['context'])
+        if 'profile' in body:
+            profile = validate_profile(body['profile'])
+            context.update(profile_context(profile))
         # The device cannot label a self-entered diet as clinician-approved.
         for key in ('displayName', 'recentDiarySummary'):
             if isinstance(body.get(key), str):
                 context[key] = body[key][:1500]
         with self.lock, self.db:
             self.db.execute('UPDATE patients SET context=? WHERE id=?', (json.dumps(context), p['id']))
-        return {'ok': True}
+        return {'ok': True, 'profileUpdated': 'profile' in body}
 
     def ingest(self, event, instance):
         with self.lock, self.db:
@@ -400,7 +395,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 5, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 6, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}

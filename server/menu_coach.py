@@ -2,6 +2,7 @@
 import json
 import re
 from coaching import plain
+from patient_profile import read_profile, age_of, GOALS, ACTIVITY
 
 MENU_READY = '__NUTRI_GENERAL_MENU_READY__'
 
@@ -31,12 +32,19 @@ class MenuCoach:
             profile = self.get(patient_id)
         stage = profile['stage']
         data = {k:v for k,v in profile.items() if k != 'stage'}
+        app = read_profile(self.db, patient_id)
+        data['appProfile'] = app
         yes = command in ('sim', 'quero', 'sim quero', 'pode sim', 'pode mandar', 'quero sim')
         no = command in ('nao', 'nao quero', 'agora nao', 'depois')
         if command in ('nao quero mais sugestoes', 'parar sugestoes', 'cancelar sugestoes', 'deixa para depois'):
             self.save(patient_id, 'declined', data)
             return 'Tudo bem, seguimos com seu diário.'
         if stage == 'ready' and request:
+            known_age = age_of(app)
+            if known_age is not None and known_age < 18:
+                self.save(patient_id, 'clinical', {'reason': 'menor de idade', 'appProfile': app})
+                return 'Para um plano individual nessa fase de crescimento, é importante envolver seu responsável e um nutricionista. Posso ajudar com o diário.'
+            self.save(patient_id, 'ready', data)
             return MENU_READY
         if stage in ('declined', 'clinical'):
             if not request:
@@ -47,7 +55,15 @@ class MenuCoach:
                 self.save(patient_id, 'declined', data)
                 return 'Tudo bem. Podemos continuar só com seu diário.'
             if yes or request:
-                self.save(patient_id, 'adult', {})
+                data = {'appProfile': app}
+                age = age_of(app)
+                if age is not None:
+                    if age < 18:
+                        self.save(patient_id, 'clinical', {'reason': 'menor de idade', 'appProfile': app})
+                        return 'Pelo cadastro você está na fase de crescimento. Para um plano individual, é importante envolver seu responsável e um nutricionista. Posso ajudar com o diário.'
+                    data['adult'] = True
+                    return self.ask_missing_goal(patient_id, data, app)
+                self.save(patient_id, 'adult', data)
                 return 'Claro! Primeiro, você tem 18 anos ou mais?'
             return None  # The invitation must not block food logging.
         if stage == 'adult':
@@ -59,13 +75,19 @@ class MenuCoach:
             if not yes and not adult_age and not re.fullmatch(r'(?:1[89]|[2-9]\d|1[01]\d)', command):
                 return 'Você tem 18 anos ou mais? Pode responder sim ou não.'
             data['adult'] = True
-            self.save(patient_id, 'goal', data)
-            return 'O que você quer melhorar na alimentação e como costuma ser sua atividade física durante a semana?'
+            return self.ask_missing_goal(patient_id, data, app)
         if stage == 'goal':
+            if not app.get('goal') and not re.search(r'perder|emagrecer|ganhar|massa|hipertrofia|manter|saude|organizar|rotina|melhorar', command):
+                data['reportedActivity'] = text[:500]
+                self.save(patient_id, 'goal', data)
+                return 'Entendi. E qual é seu objetivo com a alimentação: perder peso, manter, ganhar massa ou organizar a rotina?'
             data['goalAndActivity'] = text[:500]
             self.save(patient_id, 'health', data)
-            return 'Você tem alergias, alguma restrição alimentar ou condição de saúde? Está grávida ou amamentando? Se não houver nada disso, pode dizer “não”.'
+            return self.health_question(app)
         if stage == 'health':
+            clear_no = command in ('nao', 'nenhuma', 'nenhum', 'nao tenho', 'nao tenho nada disso', 'nao tenho restricoes', 'nao tenho alergias')
+            if not clear_no and not re.search(r'alerg|restri|intoler|diabet|renal|rim|rins|gestante|gravida|amament|doenca|doen[cç]a|saude|celiac|lactose|gluten|transtorno|anorexia|bulimia|insulina', command):
+                return 'Sobre alergias, restrições ou condições de saúde: existe algo que eu precise considerar? Se não, pode responder “não tenho”.'
             data['restrictionsAndHealth'] = text[:600]
             # This pilot does not create therapeutic diets, even if the user requests one.
             risk = re.search(r'\b(diabet\w*|renal|rim|rins|gestante|gravida|amament\w*|cancer|oncolog\w*|transtorno|anorexia|bulimia|insulina|doenca|doen[cç]a)\b', command)
@@ -82,6 +104,27 @@ class MenuCoach:
             self.save(patient_id, 'ready', data)
             return MENU_READY
         return None
+
+    @staticmethod
+    def health_question(app):
+        question = 'Você tem alergias, alguma restrição alimentar ou condição de saúde?'
+        if app.get('gender') == 'female':
+            question += ' Há gestação ou amamentação a considerar?'
+        return question + ' Se não houver, pode dizer “não”.'
+
+    def ask_missing_goal(self, patient_id, data, app):
+        goal = GOALS.get(app.get('goal'))
+        activity = ACTIVITY.get(app.get('activityLevel'))
+        if goal and activity:
+            data['goalAndActivity'] = f'Objetivo do aplicativo: {goal}. Atividade do cadastro: {activity}.'
+            self.save(patient_id, 'health', data)
+            return f'Vou considerar seu objetivo de {goal}, que já está no aplicativo. ' + self.health_question(app)
+        self.save(patient_id, 'goal', data)
+        if goal:
+            return f'No aplicativo seu objetivo é {goal}. Como está sua rotina de atividade física?'
+        if activity:
+            return 'Já tenho seu nível de atividade no aplicativo. Qual é seu objetivo com a alimentação?'
+        return 'O que você quer melhorar na alimentação e como costuma ser sua atividade física durante a semana?'
 
     def save(self, patient_id, stage, data):
         self.db.execute('INSERT OR REPLACE INTO menu_profiles(patient_id,stage,data) VALUES(?,?,?)', (patient_id,stage,json.dumps(data,ensure_ascii=False)))

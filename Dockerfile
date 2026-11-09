@@ -5,7 +5,7 @@ COPY server/app.py /app/app.py
 COPY server/records.py /app/records.py
 COPY server/coaching.py /app/coaching.py
 COPY server/messaging.py /app/messaging.py
-COPY server/nutrition_sources.py server/menu_coach.py /app/
+COPY server/nutrition_sources.py server/menu_coach.py server/patient_profile.py /app/
 COPY assets/data/taco_4ed.json /app/taco_4ed.json
 COPY LICENSE NOTICE.md /app/legal/
 COPY assets/data/TACO-NOTICE.txt /app/legal/TACO-NOTICE.txt
