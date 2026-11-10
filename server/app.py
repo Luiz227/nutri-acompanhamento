@@ -1,4 +1,4 @@
-"""Test deployment bridge for OpenNutriTracker, GPL-3.0. Python stdlib only."""
+"""Test deployment bridge for OpenNutriTracker, GPL-3.0. PDFs generated with ReportLab."""
 import hashlib
 import hmac
 import json
@@ -20,6 +20,7 @@ from coaching import Coaching
 from messaging import Messaging
 from menu_coach import MenuCoach, MENU_READY
 from patient_profile import validate_profile, profile_context
+from meal_pdf import eligible, make_pdf, MENU_REQUEST_TEXT
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
 
@@ -221,7 +222,7 @@ class Store:
                     if coaching_reply is None:
                         menu_reply = self.menu.handle(p['id'], text)
                         if menu_reply == MENU_READY:
-                            text = 'Quero sugestões gerais e flexíveis de refeições para minha rotina, usando o objetivo, as restrições e as preferências que acabei de informar.'
+                            text = MENU_REQUEST_TEXT
                         else:
                             coaching_reply = menu_reply
 
@@ -259,6 +260,7 @@ class Store:
         return {'eventId': event_id, 'userId': p['id'], 'phone': p['phone'], 'action': action,
                 'verified': bool(p['verified']), 'consentActive': bool(p['consent']),
                 'optOutPersisted': optout, 'text': text, 'message': text,
+                'documentRequested': action == 'assistant' and text == MENU_REQUEST_TEXT and eligible(menu_profile, context.get('appProfile',{}),text),
                 'context': context,
                 'history': [dict(r) for r in reversed(history)] if p['verified'] else [],
                 'catalogueCandidates': self.records.candidates(' '.join(
@@ -280,6 +282,7 @@ class Store:
                 return {'approved': False}
             if event['id'].startswith('reminder:') and not self.coaching.reminder(event['id'], p['id']):
                 return {'approved': False}
+            document = None
             if event['optout']:
                 if p['consent']:
                     return {'approved': False}
@@ -293,7 +296,14 @@ class Store:
                 if event['action'] == 'assistant':
                     candidate = body.get('candidate')
                     text = candidate.strip() if self.allow_ai and isinstance(candidate, str) and 0 < len(candidate.strip()) <= 1800 else PILOT_REPLY
-                    if self.allow_ai and body.get('record') is not None:
+                    job = self._job(p, event['id'], event['action'], event['text'], False)
+                    if self.allow_ai and job.get('documentRequested'):
+                        try:
+                            document = make_pdf(body.get('plan'), job['context'].get('displayName'), job['context'].get('appProfile',{}), self.menu.get(p['id']))
+                            text = 'Preparei seu guia com sugestões para a sua rotina. Vou enviar o PDF logo abaixo. As ideias são flexíveis e não alteram suas metas no aplicativo.'
+                        except (ValueError, TypeError, OverflowError):
+                            text = 'Não consegui organizar o PDF desta vez. Pode me pedir para gerar o guia novamente?'
+                    elif self.allow_ai and body.get('record') is not None:
                         try:
                             text = self.records.propose(p['id'], event['id'], body['record'], auto_save=True)
                             items = body['record'] if isinstance(body['record'], list) else [body['record']]
@@ -317,7 +327,7 @@ class Store:
             expires = datetime.fromtimestamp(time.time() + 30, timezone.utc).isoformat()
             return {'approved': True, 'dispatchId': dispatch_id, 'eventId': event['id'],
                     'userId': p['id'], 'phone': p['phone'], 'instance': instance, 'text': text, 'expiresAt': expires,
-                    'parts': self.messaging.prepare(dispatch_id, text)}
+                    'parts': self.messaging.prepare(dispatch_id, text, document)}
 
     def result(self, body):
         if body.get('status') not in ('accepted', 'uncertain'):
@@ -361,6 +371,7 @@ class Store:
             self.db.execute('DELETE FROM history WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM inbox WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM media_jobs WHERE created<?', (time.time() - 30 * 86400,))
+            self.db.execute('DELETE FROM dispatch_documents WHERE dispatch_id IN (SELECT id FROM dispatches WHERE created<?)', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM dispatch_parts WHERE dispatch_id IN (SELECT id FROM dispatches WHERE created<?)', (time.time() - 30 * 86400,))
             self.db.execute('UPDATE patients SET code_hash=NULL WHERE code_until<?', (time.time(),))
 
@@ -396,7 +407,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 7, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 8, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}

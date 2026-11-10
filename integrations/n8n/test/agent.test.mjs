@@ -177,3 +177,14 @@ test('media validates size, MIME and conversion; failures never fabricate a meal
   assert.match(text,/estimativas visuais/);assert.match(text,/foi meu almoço/);
   assert.equal(mediaText({text:'Comi uma maçã'},{mediaType:'audio'}),'Comi uma maçã');
 });
+
+
+test('PDF schema is added only to a server-authorized menu request',()=>{
+  const normal=makePrompt(job(),'model-test');
+  const pdf=makePrompt({...job(),documentRequested:true},'model-test');
+  assert.equal(pdf.messages.length,normal.messages.length+1);
+  assert.ok(pdf.messages.some(m=>m.content.includes('Exatamente quatro meals')));
+  const value=parseAssistantResult({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Vou organizar as sugestões.',record:null,plan:{meals:[],shopping:[],tips:[]}})}}]});
+  assert.deepEqual(value.plan,{meals:[],shopping:[],tips:[]});
+  assert.equal(value.record,null);
+});

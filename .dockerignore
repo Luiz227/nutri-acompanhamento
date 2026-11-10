@@ -8,6 +8,8 @@
 !server/menu_coach.py
 !server/patient_profile.py
 !server/portions.py
+!server/meal_pdf.py
+!server/requirements.txt
 !assets/
 !assets/data/
 !assets/data/taco_4ed.json

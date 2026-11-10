@@ -42,3 +42,5 @@ Versão 0.4: registro automático pelo WhatsApp, resumo conversacional e estimat
 Versão 0.6: leitura de fotos/áudios pelo n8n, porções médias com referência IBGE POF 2008-2009 (Tabela de Medidas Referidas, 2011, https://biblioteca.ibge.gov.br/visualizacao/livros/liv50000.pdf), e inicialização com progresso visível. A fonte/página de cada medida permanece no registro; não redistribuímos o PDF nem afirmamos peso exato de porções estimadas.
 
 Versão 0.6.1: isolamento das chaves locais do diário e do vínculo WhatsApp, leitura não destrutiva do formato legado e diagnóstico da falha de descriptografia. A recuperação não é garantida quando uma chave já foi perdida.
+
+Versão 0.7: geração de PDF privado de sugestões gerais e envio pela Evolution, mantendo o registro de fotos/áudios. PDFs usam ReportLab 4.4.9, Copyright (c) ReportLab Inc., sob licença BSD (https://pypi.org/project/reportlab/4.4.9/); a instalação da dependência conserva seus avisos de licença. O exemplo distribuído usa dados fictícios.

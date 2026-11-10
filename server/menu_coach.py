@@ -24,7 +24,7 @@ class MenuCoach:
     def handle(self, patient_id, text):
         profile = self.get(patient_id)
         command = plain(text).rstrip('.!?').strip()
-        request = bool(re.search(r'\b(sugestao|cardapio|dieta|plano alimentar|sugestoes)\b', command))
+        request = bool(re.search(r'\b(sugestao|cardapio|dieta|plano alimentar|sugestoes|pdf|guia alimentar)\b', command))
         if not profile:
             if not request:
                 return None
@@ -36,7 +36,8 @@ class MenuCoach:
         data['appProfile'] = app
         yes = command in ('sim', 'quero', 'sim quero', 'pode sim', 'pode mandar', 'quero sim')
         no = command in ('nao', 'nao quero', 'agora nao', 'depois')
-        if command in ('nao quero mais sugestoes', 'parar sugestoes', 'cancelar sugestoes', 'deixa para depois'):
+        if command in ('nao quero mais sugestoes', 'parar sugestoes', 'cancelar sugestoes', 'deixa para depois',
+                       'nao quero pdf', 'cancelar pdf', 'nao quero mais pdf', 'cancelar guia'):
             self.save(patient_id, 'declined', data)
             return 'Tudo bem, seguimos com seu diário.'
         if stage == 'ready' and request:

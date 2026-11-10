@@ -13,7 +13,7 @@ function simulate(trigger, body, options = {}) {
   const event = body.eventId ? { eventId: body.eventId, userId: body.userId, phone: body.phone } :
     { eventId: `evo:nutri:${body.data?.key?.id}`, userId: 'patient-demo-0001', phone: '5511999999999' };
   const job = { ...event, verified: true, consentActive: true, action: options.action ?? 'assistant',
-    message: body.data?.message?.conversation, context: {}, history: [],
+    message: body.data?.message?.conversation, context: {}, history: [], documentRequested: options.pdf === true,
     ...(options.stop ? { action: 'reply', consentActive: false, optOutPersisted: true } : {}) };
   function evaluate(source, json) {
     return vm.runInNewContext(source, {
@@ -57,13 +57,14 @@ function simulate(trigger, body, options = {}) {
         case 'Transcrever áudio': value={text:'Comi uma maçã no lanche'};break;
         case 'Concluir leitura e agrupar': value={...job,message:payload.event.text};break;
         case 'Consultar servidor do aplicativo': value = options.ignore ? { action: 'ignore' } : job; break;
-        case 'Consultar IA': value = { choices: [{ message: { content: JSON.stringify({reply:'Como foi seu almoço?',record:null}) }, finish_reason: 'stop' }] }; break;
-        case 'Autorizar e reservar envio': texts = options.parts ?? [payload.candidate]; value = options.block ? { approved: false } : {
+        case 'Consultar IA': value = { choices: [{ message: { content: JSON.stringify({reply:'Como foi seu almoço?',record:null,...(options.pdf?{plan:{meals:[],shopping:[],tips:[]}}:{})}) }, finish_reason: 'stop' }] }; break;
+        case 'Autorizar e reservar envio': texts = options.parts ?? (options.pdf ? ['Seu guia está pronto','PDF'] : [payload.candidate]); value = options.block ? { approved: false } : {
           ...event, approved: true, instance: 'nutri', text: payload.candidate,
           parts: texts.map((_,index)=>({dispatchId:'dispatch-demo-0001',index})),
           dispatchId: 'dispatch-demo-0001', expiresAt: new Date(Date.now() + 30000).toISOString(),
         }; break;
-        case 'Revalidar parte': value = options.cancelAfterFirst && payload.index > 0 ? {approved:false} : {approved:true,partId:'part-demo-'+payload.index,number:event.phone,instance:'nutri',text:texts[payload.index]}; break;
+        case 'Revalidar parte': value = options.cancelAfterFirst && payload.index > 0 ? {approved:false} : {approved:true,partId:'part-demo-'+payload.index,number:event.phone,instance:'nutri',text:texts[payload.index],...(options.pdf && payload.index===1 ? {mediaType:'document',mimetype:'application/pdf',fileName:'seu-guia-alimentar.pdf',media:'JVBERi0xLjQK'} : {})}; break;
+        case 'Enviar PDF pela Evolution':
         case 'Enviar pela Evolution': value = options.timeout ? { error: 'timeout' } : { key: { id: 'evolution-out-1' } }; break;
         case 'Salvar resultado no servidor': value = { continue: payload.status === 'accepted' }; break;
         default: throw new Error(name);
@@ -142,4 +143,18 @@ test('photo and audio graph authorize before download, then collect interpretati
     const blocked=simulate('Mensagem da Evolution',p,{mediaBlocked:true});
     assert.deepEqual(blocked.map(c=>c.name),['Autorizar leitura de mídia']);
   }
+});
+
+
+test('PDF is sent as a document only after text and part authorization, and opt-out stops it',()=>{
+  const calls=simulate('Mensagem da Evolution',message('Quero sugestões em PDF'),{pdf:true});
+  const names=calls.map(c=>c.name);
+  assert.ok(names.indexOf('Enviar pela Evolution')<names.indexOf('Enviar PDF pela Evolution'));
+  const file=calls.find(c=>c.name==='Enviar PDF pela Evolution');
+  assert.match(file.url,/message\/sendMedia\/nutri$/);
+  assert.equal(file.payload.mimetype,'application/pdf');assert.equal(file.payload.mediatype,'document');
+  assert.equal(file.payload.fileName,'seu-guia-alimentar.pdf');
+  assert.ok(calls.find(c=>c.name==='Autorizar e reservar envio').payload.plan);
+  const blocked=simulate('Mensagem da Evolution',message('Quero PDF'),{pdf:true,cancelAfterFirst:true});
+  assert.equal(blocked.filter(c=>c.name==='Enviar PDF pela Evolution').length,0);
 });

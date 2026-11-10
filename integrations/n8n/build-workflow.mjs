@@ -76,7 +76,7 @@ aiNode.credentials = { openAiApi: { name: 'Nutri - OpenAI' } };
 code('Ler resposta da IA', [agent.parseAssistantResult],
   'return [{json: {...$("Aplicar autorização").first().json, ...parseAssistantResult($json)}}];', 2280, -180);
 http('Autorizar e reservar envio', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/reserve" }}',
-  '={{ JSON.stringify({eventId: $json.eventId, userId: $json.userId, phone: $json.phone, kind: $json.action, candidate: $json.candidate, record: $json.record ?? null}) }}',
+  '={{ JSON.stringify({eventId: $json.eventId, userId: $json.userId, phone: $json.phone, kind: $json.action, candidate: $json.candidate, record: $json.record ?? null, plan: $json.plan ?? null}) }}',
   'Nutri - API do aplicativo', 2520, -40);
 condition('Envio liberado?', '={{ $json.approved === true }}', 2740, -40);
 code('Validar destinatário', [agent.validateDispatch], `
@@ -90,7 +90,7 @@ code('Classificar resultado do envio', [agent.deliveryReceipt],
 http('Salvar resultado no servidor', '={{ $("Configurar conexões").first().json.config.backendBaseUrl + "/v1/nutri/dispatches/result" }}',
   '={{ JSON.stringify($json) }}', 'Nutri - API do aplicativo', 3620, -120);
 code('Concluir evento', [], 'return [{json: {ok: true}}];', 3860, 160);
-add('Leia antes de ativar', 'stickyNote', 1, { content: `## Nutri + Evolution API v2\n**Importação desativada.**\n1. Leia README.md e deploy/EASYPANEL.md na raiz.\n2. Publique o servidor server/app.py e configure seu volume.\n3. Configure credenciais e URLs nos nós.\n4. Escolha o modelo de IA e habilite enabled no nó Configurar conexões.\n5. Teste com seu próprio número antes de publicar.\n\nO servidor usa respostas fixas por padrão; AI_RESPONSES_ENABLED=true libera conversa geral. A IA propõe refeições, água, peso e observações. A API v7 registra automaticamente sem confirmação. Fotos e áudios são autorizados antes da leitura; porções médias têm referência IBGE. Nutrientes vêm da TACO e de produtos Open Food Facts; aproximações são identificadas. Parágrafos viram mensagens curtas. Sugestões gerais exigem autorização e preferências. Não há prescrição. SAIR é persistido antes da confirmação.`, width: 570, height: 360 }, 0, -450);
+add('Leia antes de ativar', 'stickyNote', 1, { content: `## Nutri + Evolution API v2\n**Importação desativada.**\n1. Leia README.md e deploy/EASYPANEL.md na raiz.\n2. Publique o servidor server/app.py e configure seu volume.\n3. Configure credenciais e URLs nos nós.\n4. Escolha o modelo de IA e habilite enabled no nó Configurar conexões.\n5. Teste com seu próprio número antes de publicar.\n\nO servidor usa respostas fixas por padrão; AI_RESPONSES_ENABLED=true libera conversa geral. A IA propõe refeições, água, peso e observações. A API v8 registra automaticamente sem confirmação. Fotos e áudios são autorizados antes da leitura; porções médias têm referência IBGE. Nutrientes vêm da TACO e de produtos Open Food Facts; aproximações são identificadas. Parágrafos viram mensagens curtas. Sugestões gerais exigem autorização e preferências. Gera e envia PDF privado de sugestões após coletar preferências. Não há prescrição. SAIR é persistido antes da confirmação.`, width: 570, height: 360 }, 0, -450);
 
 // Collect bursts in SQLite; no global workflow static data or cross-patient buffers.
 nodes.find(n => n.name === 'Consultar servidor do aplicativo').parameters.options.timeout = 60000;
@@ -112,6 +112,13 @@ condition('Continuar partes?', '={{ $json.continue === true }}', 4700, -120);
 add('Pausa entre partes', 'wait', 1.1, {resume: 'timeInterval', amount: 2, unit: 'seconds'}, 4900, 120, {webhookId: 'nutri-pausa-partes'});
 nodes.find(n => n.name === 'Enviar pela Evolution').position = [4050, -120];
 classify.position = [4260, -120]; receiptNode.position = [4480, -120];
+
+condition('É PDF?', '={{ $json.mediaType === "document" }}', 4040, 60);
+http('Enviar PDF pela Evolution', '={{ $("Configurar conexões").first().json.config.evolutionBaseUrl + "/message/sendMedia/" + encodeURIComponent($json.instance) }}',
+  '={{ JSON.stringify({number:$json.number,mediatype:"document",mimetype:"application/pdf",fileName:$json.fileName,caption:$json.text,media:$json.media}) }}',
+  'Nutri - Evolution (apikey)',4260,60,{onError:'continueRegularOutput'});
+link('É PDF?', 'Enviar PDF pela Evolution');link('É PDF?','Enviar pela Evolution',1);
+link('Enviar PDF pela Evolution','Classificar resultado do envio');
 
 // Media is authorized by the backend before any provider download or AI cost.
 condition('Tem mídia?', '={{ ["image","audio"].includes($json.mediaType) }}', 820, 400);
@@ -166,7 +173,7 @@ link('Preparar partes', 'Enviar uma parte por vez');
 link('Enviar uma parte por vez', 'Concluir evento', 0);
 link('Enviar uma parte por vez', 'Revalidar parte', 1);
 link('Revalidar parte', 'Parte autorizada?');
-link('Parte autorizada?', 'Enviar pela Evolution');
+link('Parte autorizada?', 'É PDF?');
 link('Parte autorizada?', 'Concluir evento', 1); link('Enviar pela Evolution', 'Classificar resultado do envio');
 link('Classificar resultado do envio', 'Salvar resultado no servidor'); link('Salvar resultado no servidor', 'Continuar partes?');
 link('Continuar partes?', 'Pausa entre partes');

@@ -1,4 +1,4 @@
-"""Validated patient records. AI proposes; only the patient's reply confirms."""
+"""Validated patient records. AI proposes; the server validates and saves."""
 import json
 import math
 import re

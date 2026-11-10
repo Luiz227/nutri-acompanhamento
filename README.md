@@ -4,6 +4,10 @@ Derivado do [OpenNutriTracker](https://github.com/simonoppowa/OpenNutriTracker),
 com autoria e histórico preservados, sob [GNU GPLv3](LICENSE).
 Veja [créditos e alterações](NOTICE.md) e [documentação original](README.upstream.md).
 
+## Atualização 0.7 — fotos, áudios e PDF
+
+Fluxo de 42 nós e API 8: recebe refeições por foto/áudio, calcula calorias e nutrientes no servidor, sincroniza o diário e envia um PDF privado de sugestões personalizado. Veja [como atualizar](deploy/FOTOS-AUDIOS-PDF.md). O APK 2.6.1 permanece compatível.
+
 ## Correção de abertura 0.6.1
 
 O diagnóstico no Galaxy identificou falha de descriptografia causada por conflito entre configurações do armazenamento seguro. A correção separa as chaves do diário e do WhatsApp e não reinicia bancos antigos automaticamente. Leia [o diagnóstico e os limites da recuperação](deploy/RECUPERACAO-ARMAZENAMENTO.md).

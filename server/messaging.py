@@ -1,5 +1,6 @@
 """Durable per-patient burst collection and ordered, at-most-once message parts."""
 import json
+import base64
 import re
 import threading
 import time
@@ -48,6 +49,10 @@ class Messaging:
         self.db.execute("""CREATE TABLE IF NOT EXISTS media_jobs (
           id TEXT PRIMARY KEY, patient_id TEXT NOT NULL REFERENCES patients(id),
           token TEXT NOT NULL, created REAL NOT NULL, status TEXT NOT NULL)""")
+
+        self.db.execute("""CREATE TABLE IF NOT EXISTS dispatch_documents (
+          dispatch_id TEXT PRIMARY KEY REFERENCES dispatches(id), part_id TEXT UNIQUE NOT NULL,
+          payload BLOB NOT NULL)""")
 
     def begin_media(self, event, instance):
         """Admit once before downloading media or paying for interpretation."""
@@ -143,11 +148,17 @@ class Messaging:
                     self.db.execute("UPDATE inbox SET status='consumed' WHERE patient_id=? AND status='pending'", (p['id'],))
                     return self.store._ingest({**event, 'text': '\n'.join(r['text'] for r in rows)}, instance)
 
-    def prepare(self, dispatch_id, text):
+    def prepare(self, dispatch_id, text, document=None):
         parts = split_message(text)
         for index, part in enumerate(parts):
             self.db.execute('INSERT INTO dispatch_parts(id,dispatch_id,position,text) VALUES(?,?,?,?)',
                             (str(uuid.uuid4()), dispatch_id, index, part))
+        if document is not None:
+            part_id = str(uuid.uuid4())
+            self.db.execute('INSERT INTO dispatch_parts(id,dispatch_id,position,text) VALUES(?,?,?,?)',
+                            (part_id, dispatch_id, len(parts), 'Seu guia de alimentação'))
+            self.db.execute('INSERT INTO dispatch_documents VALUES(?,?,?)', (dispatch_id,part_id,document))
+            parts.append('document')
         return [{'dispatchId': dispatch_id, 'index': index} for index in range(len(parts))]
 
     def authorize(self, body, instance):
@@ -170,9 +181,16 @@ class Messaging:
             previous = self.db.execute("SELECT id FROM dispatch_parts WHERE dispatch_id=? AND position<? AND status<>'accepted'", (row['dispatch_id'], index)).fetchone()
             if previous:
                 return {'approved': False}
+            document = self.db.execute('SELECT payload FROM dispatch_documents WHERE part_id=?', (row['id'],)).fetchone()
+            if document and (self.store.menu.get(row['patient_id']) or {}).get('stage') != 'ready':
+                return {'approved': False}
             self.db.execute("UPDATE dispatch_parts SET status='reserved' WHERE id=?", (row['id'],))
-            return {'approved': True, 'partId': row['id'], 'dispatchId': row['dispatch_id'],
+            result = {'approved': True, 'partId': row['id'], 'dispatchId': row['dispatch_id'],
                     'number': row['phone'], 'instance': instance, 'text': row['text']}
+            if document:
+                result.update(mediaType='document', mimetype='application/pdf', fileName='seu-guia-alimentar.pdf',
+                              media=base64.b64encode(document['payload']).decode('ascii'))
+            return result
 
     def receipt(self, body):
         with self.store.lock, self.db:

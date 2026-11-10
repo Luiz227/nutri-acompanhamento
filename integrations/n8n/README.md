@@ -1,6 +1,6 @@
 # Agente nutricional: aplicativo + n8n + Evolution API
 
-Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 40 nós, desativado e sem segredos. Requer nutri-api **apiVersion 7**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
+Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 8**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
 
 As verificações locais simulam os serviços. A versão nova ainda precisa ser importada/testada na instância real do operador. Leia [como atualizar e testar](../../deploy/MIDIA-E-ABERTURA.md).
 
@@ -23,6 +23,10 @@ As verificações locais simulam os serviços. A versão nova ainda precisa ser 
 6. No servidor use o webhook /webhook/nutri-app-registration e segredo exclusivo de entrada do cadastro. AI_RESPONSES_ENABLED=true libera a IA.
 7. Ative o workflow e teste com seu próprio número vinculado pelo código do app.
 
+## PDF de sugestões (0.7)
+
+Leia [FOTOS-AUDIOS-PDF.md](../../deploy/FOTOS-AUDIOS-PDF.md). O servidor gera um PDF privado de duas páginas com sugestões estruturadas da IA; o nó Enviar PDF pela Evolution entrega como documento. Sugestões não são lançadas como consumo no aplicativo.
+
 ## Caminho da conversa
 
 Cadastro e vínculo por código precedem o uso de dados pessoais. O servidor decide autorização, contexto do paciente e respostas de onboarding. Nome, preferências de lembretes, perfil e metas do aplicativo chegam à IA; dados disponíveis não devem ser perguntados novamente.
@@ -35,7 +39,7 @@ A IA propõe registros estruturados. O servidor valida os dados, converte medida
 
 Parágrafos viram mensagens separadas, enviadas em sequência com pausa de dois segundos. Cada parte é reautorizada no servidor. Envios incertos não são repetidos automaticamente. SAIR cancela a autorização e bloqueia partes ainda não enviadas; também funciona quando recebido como fala transcrita.
 
-Lembretes só são enviados com autorização específica. Horários padrão: 9h, 12h, 15h e 18h de Brasília; preferências e cancelamento são persistentes. Sugestões gerais exigem coleta de preferências e não constituem prescrição clínica. PDF personalizado não foi implementado.
+Lembretes só são enviados com autorização específica. Horários padrão: 9h, 12h, 15h e 18h de Brasília; preferências e cancelamento são persistentes. Sugestões gerais exigem coleta de preferências e não constituem prescrição clínica. O PDF personalizado respeita a coleta de preferências e é enviado como documento, sem URL pública.
 
 ## Privacidade e verificação
 
@@ -46,6 +50,7 @@ Execute:
 ```text
 node integrations/n8n/build-workflow.mjs
 node --test integrations/n8n/test/*.test.mjs
+py -3 -m pip install -r server/requirements.txt
 py -3 -m unittest discover -s server -p "test*.py"
 ```
 
