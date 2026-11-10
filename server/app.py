@@ -220,7 +220,8 @@ class Store:
                         if invitation:
                             coaching_reply += '\n\n' + invitation
                     if coaching_reply is None:
-                        menu_reply = self.menu.handle(p['id'], text)
+                        photo_input=self.messaging.photo_context(event,p['id']) if event.get('_photoSources') else None
+                        menu_reply = self.menu.handle(p['id'], text) if not photo_input or (not photo_input.get('records') and not photo_input.get('failed')) else None
                         if menu_reply == MENU_READY:
                             text = MENU_REQUEST_TEXT
                         else:
@@ -236,8 +237,17 @@ class Store:
                         action, text = 'reply', PILOT_REPLY
         else:
             return {'action': 'ignore'}
+        photo_context=None
+        if action=='assistant' and event.get('kind')=='incoming' and self.allow_ai:
+            photo_context=self.messaging.photo_context(event,p['id'])
+            if photo_context and photo_context.get('failed'):
+                action,text='reply','Não consegui identificar esta refeição com segurança. Pode enviar outra foto mais nítida, mostrando o prato inteiro?'
+            elif photo_context and photo_context.get('records'):
+                action,text='reply','Vou registrar os alimentos identificados na foto.'
         self.db.execute('INSERT INTO events(id,patient_id,action,text,optout,created) VALUES(?,?,?,?,?,?)',
             (event_id, p['id'], action, text, int(optout), time.time()))
+        if photo_context:
+            self.db.execute('INSERT INTO photo_events(id,payload) VALUES(?,?)',(event_id,json.dumps(photo_context)))
         return self._job(p, event_id, action, text, optout)
 
     def _job(self, p, event_id, action, text, optout):
@@ -303,7 +313,7 @@ class Store:
                             text = 'Preparei seu guia com sugestões para a sua rotina. Vou enviar o PDF logo abaixo. As ideias são flexíveis e não alteram suas metas no aplicativo.'
                         except (ValueError, TypeError, OverflowError):
                             text = 'Não consegui organizar o PDF desta vez. Pode me pedir para gerar o guia novamente?'
-                    elif self.allow_ai and body.get('record') is not None:
+                    elif self.allow_ai and body.get('record') is not None and not self.db.execute('SELECT id FROM photo_events WHERE id=?',(event['id'],)).fetchone():
                         try:
                             text = self.records.propose(p['id'], event['id'], body['record'], auto_save=True)
                             items = body['record'] if isinstance(body['record'], list) else [body['record']]
@@ -314,7 +324,10 @@ class Store:
                         except (ValueError, TypeError, OverflowError):
                             text = 'Antes de registrar, preciso confirmar os dados: refeições em gramas, água em ml/l, peso em kg/g, ou o texto da observação. Pode informar novamente?'
                 elif event['action'] == 'reply':
-                    text = event['text']
+                    photo=self.db.execute('SELECT payload FROM photo_events WHERE id=?',(event['id'],)).fetchone()
+                    if photo and json.loads(photo['payload']).get('records'):
+                        text=self.records.propose(p['id'],event['id'],json.loads(photo['payload'])['records'],auto_save=True)
+                    else:text = event['text']
                 else:
                     text = 'Olá! Sou a assistente virtual de acompanhamento nutricional do aplicativo. Para confirmar a conexão, envie o código exibido no aplicativo. Se não foi você quem solicitou, envie SAIR.'
             dispatch_id = 'dispatch:' + str(uuid.uuid4())
@@ -370,6 +383,8 @@ class Store:
         with self.lock, self.db:
             self.db.execute('DELETE FROM history WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM inbox WHERE created<?', (time.time() - 30 * 86400,))
+            self.db.execute('DELETE FROM photo_drafts WHERE created<?', (time.time()-30*86400,))
+            self.db.execute('DELETE FROM photo_events WHERE id IN (SELECT id FROM events WHERE created<?)',(time.time()-30*86400,))
             self.db.execute('DELETE FROM media_jobs WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM dispatch_documents WHERE dispatch_id IN (SELECT id FROM dispatches WHERE created<?)', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM dispatch_parts WHERE dispatch_id IN (SELECT id FROM dispatches WHERE created<?)', (time.time() - 30 * 86400,))
@@ -407,7 +422,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 8, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 9, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}

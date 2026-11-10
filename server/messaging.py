@@ -1,6 +1,7 @@
 """Durable per-patient burst collection and ordered, at-most-once message parts."""
 import json
 import base64
+from photo_meals import validate_analysis, prepare as prepare_photo
 import re
 import threading
 import time
@@ -54,6 +55,28 @@ class Messaging:
           dispatch_id TEXT PRIMARY KEY REFERENCES dispatches(id), part_id TEXT UNIQUE NOT NULL,
           payload BLOB NOT NULL)""")
 
+        self.db.executescript("""CREATE TABLE IF NOT EXISTS photo_drafts (
+          id TEXT PRIMARY KEY REFERENCES media_jobs(id), patient_id TEXT NOT NULL REFERENCES patients(id),
+          caption TEXT NOT NULL DEFAULT '', analysis TEXT, created REAL NOT NULL);
+          CREATE TABLE IF NOT EXISTS photo_events (
+          id TEXT PRIMARY KEY REFERENCES events(id), payload TEXT NOT NULL);""")
+
+    def photo_context(self, event, patient_id):
+        ids=event.get('_photoSources',[])
+        if not isinstance(ids,list) or not 1<=len(ids)<=10:return None
+        rows=[]
+        for identifier in ids:
+            if not isinstance(identifier,str) or len(identifier)>300:continue
+            row=self.db.execute("SELECT q.* FROM photo_drafts q JOIN media_jobs m ON m.id=q.id WHERE q.id=? AND q.patient_id=? AND m.status='processed' AND q.analysis IS NOT NULL",(identifier,patient_id)).fetchone()
+            if row:rows.append(row)
+        if not rows:return None
+        user_text='\n'.join(r['caption'] for r in rows)+'\n'+str(event.get('_photoUserText',''))[:4000]
+        analyses=[json.loads(r['analysis']) for r in rows]
+        if any(a.get('usable') is not True for a in analyses):
+            return {'records':None,'failed':True,'userText':user_text,'sourceIds':[r['id'] for r in rows]}
+        records=prepare_photo(analyses,user_text)
+        return {'records':records,'userText':user_text,'sourceIds':[r['id'] for r in rows]}
+
     def begin_media(self, event, instance):
         """Admit once before downloading media or paying for interpretation."""
         with self.changed, self.db:
@@ -71,6 +94,8 @@ class Messaging:
             token = str(uuid.uuid4())
             self.db.execute('INSERT INTO media_jobs VALUES(?,?,?,?,?)', (event_id, patient['id'], token, time.time(), 'processing'))
             self.db.execute("INSERT INTO inbox(id,patient_id,text,created,status) VALUES(?,?,?,?,'processing')", (event_id, patient['id'], '', time.time()))
+            if event['mediaType']=='image':
+                self.db.execute('INSERT INTO photo_drafts(id,patient_id,caption,created) VALUES(?,?,?,?)', (event_id,patient['id'],str(event.get('caption',''))[:1000],time.time()))
             self.changed.notify_all()
             return {'approved': True, 'mediaToken': token}
 
@@ -86,6 +111,10 @@ class Messaging:
             text = event.get('text')
             if not isinstance(text, str) or not 1 <= len(text.strip()) <= 4000:
                 return {'action': 'ignore'}
+            if 'photo' in body and self.db.execute('SELECT id FROM photo_drafts WHERE id=?',(row['id'],)).fetchone():
+                try: analysis=validate_analysis(body.get('photo'))
+                except (ValueError,TypeError): analysis={'usable':False,'items':[]}
+                self.db.execute('UPDATE photo_drafts SET analysis=? WHERE id=? AND patient_id=?',(json.dumps(analysis),row['id'],row['patient_id']))
             self.db.execute("UPDATE media_jobs SET status='processed' WHERE id=?", (row['id'],))
             self.db.execute("UPDATE inbox SET text=?,status='pending' WHERE id=? AND status='processing'", (text.strip(), row['id']))
             self.changed.notify_all()
@@ -148,7 +177,9 @@ class Messaging:
                     continue
                 with self.db:
                     self.db.execute("UPDATE inbox SET status='consumed' WHERE patient_id=? AND status='pending'", (p['id'],))
-                    return self.store._ingest({**event, 'text': '\n'.join(r['text'] for r in rows)}, instance)
+                    photo_ids=[r['id'] for r in rows if self.db.execute('SELECT id FROM photo_drafts WHERE id=? AND analysis IS NOT NULL',(r['id'],)).fetchone()]
+                    return self.store._ingest({**event, 'text': '\n'.join(r['text'] for r in rows),
+                        '_photoSources':photo_ids,'_photoUserText':'\n'.join(r['text'] for r in rows if r['id'] not in photo_ids)}, instance)
 
     def prepare(self, dispatch_id, text, document=None):
         parts = split_message(text)

@@ -44,3 +44,5 @@ Versão 0.6: leitura de fotos/áudios pelo n8n, porções médias com referênci
 Versão 0.6.1: isolamento das chaves locais do diário e do vínculo WhatsApp, leitura não destrutiva do formato legado e diagnóstico da falha de descriptografia. A recuperação não é garantida quando uma chave já foi perdida.
 
 Versão 0.7: geração de PDF privado de sugestões gerais e envio pela Evolution, mantendo o registro de fotos/áudios. PDFs usam ReportLab 4.4.9, Copyright (c) ReportLab Inc., sob licença BSD (https://pypi.org/project/reportlab/4.4.9/); a instalação da dependência conserva seus avisos de licença. O exemplo distribuído usa dados fictícios.
+
+Versão 0.8: registro direto de observações visuais estruturadas; associações de arroz simples/batata e referência estimada derivada de cortes bovinos grelhados. Médias e porções são identificadas como estimativas e mantêm a fonte TACO/NEPA/UNICAMP (2011) e IDs utilizados.

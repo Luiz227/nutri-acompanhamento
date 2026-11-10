@@ -1,6 +1,6 @@
 # Agente nutricional: aplicativo + n8n + Evolution API
 
-Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 8**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
+Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 9**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
 
 As verificações locais simulam os serviços. A versão nova ainda precisa ser importada/testada na instância real do operador. Leia [como atualizar e testar](../../deploy/MIDIA-E-ABERTURA.md).
 
@@ -22,6 +22,10 @@ As verificações locais simulam os serviços. A versão nova ainda precisa ser 
 5. Na Evolution, configure a URL de produção /webhook/nutri-evolution-inbound, MESSAGES_UPSERT e o mesmo header secreto esperado pelo webhook n8n. Webhook by Events desligado. Base64 não é necessário no webhook.
 6. No servidor use o webhook /webhook/nutri-app-registration e segredo exclusivo de entrada do cadastro. AI_RESPONSES_ENABLED=true libera a IA.
 7. Ative o workflow e teste com seu próprio número vinculado pelo código do app.
+
+## Foto automática (0.8)
+
+Leia [FOTO-AUTOMATICA.md](../../deploy/FOTO-AUTOMATICA.md): análise visual estruturada, busca nutricional corrigida e registro direto de fotos reconhecíveis. O nó de conversa é dispensado nesse caminho, evitando a pergunta de confirmação. Imagens continuam sendo estimativas, e componentes incertos não recebem nutrientes inventados.
 
 ## PDF de sugestões (0.7)
 

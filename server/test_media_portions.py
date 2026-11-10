@@ -35,7 +35,9 @@ class MediaPortionTests(unittest.TestCase):
     def test_photo_estimate_is_not_presented_as_weighed(self):
         r=validate_record({'kind':'meal','text':'arroz cozido','quantity':120,'unit':'g','mealType':'lunch','estimateSource':'photo'})
         self.assertTrue(r['estimated'])
-        self.assertIn('Pela foto',self.store.records.automatic_reply([r]))
+        self.verify()
+        reply=self.store.records.propose(self.patient['id'],'photo-estimate-receipt',r,auto_save=True)
+        self.assertIn('estimados pela foto',reply)
 
     def test_media_requires_verified_owner_and_deduplicates_before_paid_call(self):
         e=self.media()

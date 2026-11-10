@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { normalizeApp, normalizeEvolution, routeJob, makePrompt, parseReply, parseAssistantResult,
-  validateDispatch, deliveryReceipt, validateMedia, mediaText, visionPrompt } from '../src/agent.mjs';
+  validateDispatch, deliveryReceipt, validateMedia, mediaText, visionPrompt, photoAnalysis } from '../src/agent.mjs';
 
 const inbound = (text = 'Olá') => ({ event: 'messages.upsert', instance: 'nutri',
   data: { key: { id: 'msg-123', remoteJid: '5511999999999@s.whatsapp.net', fromMe: false },
@@ -187,4 +187,20 @@ test('PDF schema is added only to a server-authorized menu request',()=>{
   const value=parseAssistantResult({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Vou organizar as sugestões.',record:null,plan:{meals:[],shopping:[],tips:[]}})}}]});
   assert.deepEqual(value.plan,{meals:[],shopping:[],tips:[]});
   assert.equal(value.record,null);
+});
+
+
+test('structured photo analysis keeps foods and portions, discards model nutrition and rejects invalid weights',()=>{
+  const event={mediaType:'image'};
+  const response=(items)=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({usable:true,items})}}]});
+  const value=photoAnalysis(response([{food:'arroz branco',grams:175,confidence:'high',calories:99999,userId:'forged'},{food:'molho incerto',grams:null,confidence:'low'}]),event);
+  assert.deepEqual(value.items[0],{food:'arroz branco',grams:175,confidence:'high'});
+  assert.equal(value.items[1].grams,null);
+  assert.equal(photoAnalysis(response([{food:'arroz',grams:-1,confidence:'high'}]),event),null);
+  assert.match(mediaText(response(value.items),event),/arroz branco: 175 g/);
+  const prompt=visionPrompt({mimeType:'image/jpeg',base64:'aaa'},event,'model-test');
+  assert.equal(prompt.response_format.type,'json_schema');
+  assert.equal(prompt.response_format.json_schema.strict,true);
+  assert.match(prompt.messages[0].content,/Separe os alimentos/);
+  assert.match(prompt.messages[0].content,/Não faça perguntas de confirmação/);
 });

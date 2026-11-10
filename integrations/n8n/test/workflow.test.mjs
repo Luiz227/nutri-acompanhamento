@@ -53,9 +53,9 @@ function simulate(trigger, body, options = {}) {
       switch (name) {
         case 'Autorizar leitura de mídia': value={approved:!options.mediaBlocked,mediaToken:'media-claim-test'};break;
         case 'Baixar mídia da Evolution': value={base64:'a'.repeat(64),mimetype:body.data.message.imageMessage?'image/jpeg':'audio/mp4'};break;
-        case 'Ler foto com IA': value={choices:[{finish_reason:'stop',message:{content:JSON.stringify({usable:true,description:'Uma maçã média'})}}]};break;
+        case 'Ler foto com IA': value={choices:[{finish_reason:'stop',message:{content:JSON.stringify(options.automaticPhoto?{usable:true,items:[{food:'arroz branco',grams:175,confidence:'high'}]}:{usable:true,description:'Uma maçã média'})}}]};break;
         case 'Transcrever áudio': value={text:'Comi uma maçã no lanche'};break;
-        case 'Concluir leitura e agrupar': value={...job,message:payload.event.text};break;
+        case 'Concluir leitura e agrupar': value=options.automaticPhoto?{...job,action:'reply',text:'Vou registrar os alimentos identificados na foto.'}:{...job,message:payload.event.text};break;
         case 'Consultar servidor do aplicativo': value = options.ignore ? { action: 'ignore' } : job; break;
         case 'Consultar IA': value = { choices: [{ message: { content: JSON.stringify({reply:'Como foi seu almoço?',record:null,...(options.pdf?{plan:{meals:[],shopping:[],tips:[]}}:{})}) }, finish_reason: 'stop' }] }; break;
         case 'Autorizar e reservar envio': texts = options.parts ?? (options.pdf ? ['Seu guia está pronto','PDF'] : [payload.candidate]); value = options.block ? { approved: false } : {
@@ -157,4 +157,15 @@ test('PDF is sent as a document only after text and part authorization, and opt-
   assert.ok(calls.find(c=>c.name==='Autorizar e reservar envio').payload.plan);
   const blocked=simulate('Mensagem da Evolution',message('Quero PDF'),{pdf:true,cancelAfterFirst:true});
   assert.equal(blocked.filter(c=>c.name==='Enviar PDF pela Evolution').length,0);
+});
+
+
+test('recognized photo passes structured foods to backend and bypasses the conversational confirmation',()=>{
+  const p=message('');p.data.message={imageMessage:{caption:'Meu almoço'}};
+  const calls=simulate('Mensagem da Evolution',p,{automaticPhoto:true});
+  const completed=calls.find(c=>c.name==='Concluir leitura e agrupar');
+  assert.deepEqual(completed.payload.photo,{usable:true,items:[{food:'arroz branco',grams:175,confidence:'high'}]});
+  assert.ok(calls.some(c=>c.name==='Ler foto com IA'));
+  assert.equal(calls.some(c=>c.name==='Consultar IA'),false);
+  assert.ok(calls.some(c=>c.name==='Enviar pela Evolution'));
 });

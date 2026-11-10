@@ -9,6 +9,7 @@ import difflib
 import random
 from nutrition_sources import ProductSource
 from portions import portion
+from photo_meals import clean_food_name
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -20,6 +21,15 @@ def normalized(text):
 
 # Explicit synonyms only: never infer fat content, preparation, or bread type.
 FOOD_ALIASES = {
+    'arroz branco': 'Arroz, tipo 1, cozido',
+    'arroz branco cozido': 'Arroz, tipo 1, cozido',
+    'arroz cozido': 'Arroz, tipo 1, cozido',
+    'batata frita': 'Batata, inglesa, frita',
+    'batata fritas': 'Batata, inglesa, frita',
+    'batatas fritas': 'Batata, inglesa, frita',
+    'cenoura cozida': 'Cenoura, cozida',
+    'brocolis cozido': 'Brócolis, cozido',
+    'molho de tomate': 'Tomate, molho industrializado',
     'mussarela': 'Queijo, mozarela',
     'mucarela': 'Queijo, mozarela',
     'mozarela': 'Queijo, mozarela',
@@ -100,6 +110,12 @@ def validate_record(raw):
                 result['text'] = result['text'][prefix.end():].strip()
                 if not result['text']:
                     raise ValueError('Informe o nome do alimento.')
+    if raw.get('estimateSource') == 'photo':
+        result.update(estimateSource='photo',estimated=True)
+        if raw.get('visualConfidence') in ('high','medium','low'):
+            result['visualConfidence']=raw['visualConfidence']
+        if raw.get('mealTypeSource') in ('time','explicit'):
+            result['mealTypeSource']=raw['mealTypeSource']
     date = raw.get('occurredAt')
     if date:
         if not isinstance(date, str):
@@ -135,8 +151,32 @@ class Records:
                       and normalized(f['name']).startswith('frango peito ') else 0), f) for f in self.foods]
         return [{'name': f['name']} for score, f in sorted(scored, key=lambda pair: -pair[0]) if score > 0][:12]
 
+    def reviewed(self, text):
+        name=clean_food_name(text)
+        canonical=FOOD_ALIASES.get(name)
+        if canonical:
+            return next((f for f in self.foods if normalized(f['name'])==normalized(canonical)),None)
+        words=set(name.split())
+        incompatible=words & {'milanesa','empanado','empanada','frango','suino','suina','porco','vegetal','soja','hamburguer','figado'}
+        if not incompatible and ('bife' in words or {'carne','bovina'} <= words) and words & {'grelhado','grelhada'}:
+            # Unknown cut: a transparent, derived reference across common cuts,
+            # never claim the photo identified a specific cut or exact fat content.
+            ids={344,346,358,368,370,377}
+            cuts=words & {'picanha','patinho','alcatra','maminha','costela','acem','cupim','mignon','contra'}
+            foods=[f for f in self.foods if f['id'] in ids and all(isinstance(f['nutrients'].get(k),(int,float)) for k in ('energy_kcal_100','proteins_100','fat_100','carbohydrates_100'))]
+            if cuts:foods=[f for f in foods if cuts <= set(normalized(f['name']).split())]
+            if not foods:return None
+            columns=set().union(*(f['nutrients'] for f in foods))
+            values={k:sum(f['nutrients'][k] for f in foods)/len(foods) if all(isinstance(f['nutrients'].get(k),(int,float)) for f in foods) else None for k in columns}
+            return {'code':'taco-estimate:beef-grilled','name':'Carne bovina grelhada (referência média)',
+                    'nutrients':values,'source':'Estimativa derivada da TACO/NEPA/UNICAMP (2011)',
+                    'referenceIds':[f['id'] for f in foods]}
+        return None
+
     def closest(self, text):
-        query = normalized(text)
+        reviewed=self.reviewed(text)
+        if reviewed:return reviewed
+        query = clean_food_name(text)
         stop = {'de', 'do', 'da', 'com', 'sem', 'um', 'uma', 'tipo', 'comum'}
         words = set(query.split()) - stop
         if 'frango' in words and not words & {'cru','crua','cozido','cozida','grelhado','grelhada','assado','assada','frito','frita','milanesa'}:
@@ -148,6 +188,10 @@ class Records:
             # Only compare within the same named food family.
             family = name.split()[0]
             if family not in words:
+                continue
+            if (tokens & {'carreteiro','milanesa','risoto','recheado','recheada','bolonhesa','queijo','chocolate','bacon','toucinho','linguica'}) - words:
+                continue
+            if (words & {'doce','carreteiro','parboilizado'}) - tokens:
                 continue
             if 'integral' not in words and 'integral' in tokens:
                 continue
@@ -172,6 +216,8 @@ class Records:
         return candidates[0][1] if candidates and candidates[0][0] >= .55 else None
 
     def automatic_reply(self, records):
+        if any(r.get('estimateSource')=='photo' for r in records):
+            return self.photo_reply(records)
         paragraphs = []
         introductions = ('Anotei', 'Registrei', 'Já deixei salvo')
         for record in records:
@@ -217,17 +263,47 @@ class Records:
             raise ValueError('Envie até três alimentos por mensagem para eu organizar os detalhes.')
         return message
 
+    def photo_reply(self, records):
+        meals=[r for r in records if r['kind']=='meal']
+        known=[r for r in meals if 'nutrition' in r]
+        unknown=[r for r in records if 'nutrition' not in r and (r['kind']=='meal' or r.get('visualConfidence')=='low')]
+        label=MEAL_LABELS.get(next((r.get('mealType') for r in meals),None),'refeição').lower()
+        paragraphs=[f'Registrei seu {label}. As porções e os valores abaixo são estimados pela foto.'] if known else []
+        def value(number):return f'{number:.1f}'.replace('.',',')
+        for r in known:
+            n=r['nutrition'];name=r['text'][:55].rstrip()
+            def fmt(k):return value(n[k]) if n.get(k) is not None else 'não disponível'
+            paragraphs.append(f"{name.capitalize()} ({r['quantity']:g} g): {fmt('energyKcal')} kcal.\nProteína: {fmt('proteinG')} g | Carboidratos: {fmt('carbsG')} g | Gordura: {fmt('fatG')} g.")
+        if len(known)>1 or (known and unknown):
+            sums={k:sum(r['nutrition'][k] for r in known) if all(r['nutrition'].get(k) is not None for r in known) else None for k in ('energyKcal','proteinG','carbsG','fatG')}
+            def total(k):return value(sums[k]) if sums[k] is not None else 'não disponível'
+            title='Subtotal estimado dos alimentos identificados' if unknown else 'Total estimado'
+            paragraphs.append(f"{title}: {total('energyKcal')} kcal.\nProteína: {total('proteinG')} g | Carboidratos: {total('carbsG')} g | Gordura: {total('fatG')} g.")
+        if unknown:
+            names=', '.join(r['text'][:40] for r in unknown[:4])
+            paragraphs.append(f'Não incluí {names} no cálculo porque não foi possível identificar com segurança.' if known else 'Não consegui identificar esta refeição com segurança. Pode enviar outra foto mais nítida, mostrando o prato inteiro?')
+        message='\n\n'.join(paragraphs)
+        if len(message)>1800:
+            # Keep individual food/energy bubbles; total retains all four macros.
+            paragraphs=[p.split('\nProteína:')[0] if i and i<=len(known) else p for i,p in enumerate(paragraphs)]
+            message='\n\n'.join(paragraphs)
+        if len(message)>1800:raise ValueError('Muitos detalhes na imagem.')
+        return message
+
     def propose(self, patient_id, event_id, raw, auto_save=False):
         items = raw if isinstance(raw, list) else [raw]
-        if not 1 <= len(items) <= 5:
-            raise ValueError('Confirme até cinco registros por vez.')
+        if not 1 <= len(items) <= 10:
+            raise ValueError('Envie até dez registros por vez.')
         records = [validate_record(item) for item in items]
-        if sum(len(r['text']) for r in records) > 1000:
+        if sum(len(r['text']) for r in records) > 1800:
             raise ValueError('Divida descrições longas em mais de uma mensagem.')
         for record in records:
             if record['kind'] == 'meal':
                 # Match canonical names or reviewed synonyms, never fuzzy guesses.
-                name = normalized(record['text'])
+                if record.get('visualConfidence')=='low':
+                    record['nutritionStatus']='unknown'
+                    continue
+                name = clean_food_name(record['text'])
                 name = normalized(FOOD_ALIASES.get(name, name))
                 matches = [f for f in self.foods if normalized(f['name']) == name]
                 if not matches:
@@ -235,6 +311,9 @@ class Records:
                     words = sorted(name.split())
                     matches = [f for f in self.foods if sorted(normalized(f['name']).split()) == words]
                 food = matches[0] if len(matches) == 1 else None
+                if not food and auto_save:
+                    food=self.reviewed(record['text'])
+                    if food:record['estimated']=True
                 if auto_save and record.get('barcode'):
                     food = self.products.product(record['barcode'])
                 if not food and auto_save:
@@ -245,11 +324,12 @@ class Records:
 
                     record.update(foodCode=food.get('code') or f"taco:{food['id']}", foodName=food['name'],
                                   nutrientsPer100g=food['nutrients'], source=food.get('source', 'TACO/NEPA/UNICAMP (2011)'))
+                    if food.get('referenceIds'):record['referenceIds']=food['referenceIds']
                     record['nutrition'] = {key: round(food['nutrients'][column] * record['quantity'] / 100, 4)
                                            if isinstance(food['nutrients'].get(column), (int, float)) else None
                                            for key, column in NUTRIENTS.items()}
                 else:
-                    if 'frango' in name.split():
+                    if 'frango' in name.split() and record.get('estimateSource')!='photo':
                         self.db.execute("UPDATE records SET status='superseded' WHERE patient_id=? AND status='pending'", (patient_id,))
                         return (f"Você informou {record['quantity']:g} g de {record['text']}. "
                                 'Para calcular os nutrientes certos, me conta: qual era o corte e como foi preparado? '

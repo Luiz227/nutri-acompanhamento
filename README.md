@@ -4,6 +4,10 @@ Derivado do [OpenNutriTracker](https://github.com/simonoppowa/OpenNutriTracker),
 com autoria e histórico preservados, sob [GNU GPLv3](LICENSE).
 Veja [créditos e alterações](NOTICE.md) e [documentação original](README.upstream.md).
 
+## Atualização 0.8 — foto com registro automático
+
+Corrige o arroz branco associado a arroz carreteiro, reconhece nomes usuais de bife/batata e usa observações visuais estruturadas para registrar uma foto clara sem pedir descrição detalhada ou confirmação. Veja [como atualizar para API 9](deploy/FOTO-AUTOMATICA.md). O APK atual continua compatível.
+
 ## Atualização 0.7 — fotos, áudios e PDF
 
 Fluxo de 42 nós e API 8: recebe refeições por foto/áudio, calcula calorias e nutrientes no servidor, sincroniza o diário e envia um PDF privado de sugestões personalizado. Veja [como atualizar](deploy/FOTOS-AUDIOS-PDF.md). O APK 2.6.1 permanece compatível.

@@ -179,9 +179,28 @@ void main() {
                             'fat_100': 3,
                           },
                         },
+                        {
+                          'id': 'photo-beef-3',
+                          'seq': 3,
+                          'kind': 'meal',
+                          'text': 'Bife bovino grelhado',
+                          'foodCode': 'taco-estimate:beef-grilled',
+                          'estimated': true,
+                          'estimateSource': 'photo',
+                          'quantity': 200,
+                          'unit': 'g',
+                          'mealType': 'lunch',
+                          'occurredAt': '2026-11-10T12:00:00Z',
+                          'nutrientsPer100g': {
+                            'energy_kcal_100': 236,
+                            'proteins_100': 34,
+                            'carbohydrates_100': 0,
+                            'fat_100': 10,
+                          },
+                        },
                       ]
                     : [],
-                'nextCursor': 2,
+                'nextCursor': 3,
                 'hasMore': false,
               }),
               200,
@@ -191,11 +210,16 @@ void main() {
         ),
       );
       await session.synchronize();
-      expect(intakes.entries, hasLength(2));
+      expect(intakes.entries, hasLength(3));
       expect(intakes.entries.first.totalKcal, closeTo(100, .01));
       expect(intakes.entries.first.meal.url, contains('openfoodfacts.org'));
       expect(intakes.entries.last.meal.name, contains('estimativa'));
-      expect(intakes.entries.last.type, IntakeTypeEntity.breakfast);
+      expect(intakes.entries[1].type, IntakeTypeEntity.breakfast);
+      expect(intakes.entries.last.type, IntakeTypeEntity.lunch);
+      expect(intakes.entries.last.totalKcal, closeTo(472, .01));
+      expect(intakes.entries.last.totalProteinsGram, closeTo(68, .01));
+      await session.synchronize();
+      expect(intakes.entries, hasLength(3));
     },
   );
 

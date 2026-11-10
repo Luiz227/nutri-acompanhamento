@@ -9,6 +9,7 @@
 !server/patient_profile.py
 !server/portions.py
 !server/meal_pdf.py
+!server/photo_meals.py
 !server/requirements.txt
 !assets/
 !assets/data/
