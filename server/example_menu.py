@@ -3,6 +3,7 @@ PLAN = {
     'meals': [
         {'mealType':'breakfast','suggestion':'Pão integral com ovos, uma fruta da estação e café ou chá, conforme sua preferência.',
          'alternative':'Iogurte natural com aveia e banana é uma alternativa prática para os dias corridos.'},
+        {'mealType':'morningSnack','suggestion':'Uma fruta da estação.', 'alternative':'Uma opção prática da sua preferência para o intervalo da manhã.'},
         {'mealType':'lunch','suggestion':'Arroz e feijão, frango grelhado e uma combinação de salada com legumes. Varie as cores ao longo da semana.',
          'alternative':'Troque o frango por peixe ou ovos. Uma combinação de lentilha e vegetais também ajuda a variar.'},
         {'mealType':'snack','suggestion':'Uma fruta com iogurte natural ou um sanduíche simples pode deixar a tarde mais prática.',

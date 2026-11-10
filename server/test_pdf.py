@@ -89,6 +89,12 @@ class PdfTests(unittest.TestCase):
         pdf=make_pdf(plan,'Nome fictício de demonstração',{'goal':'maintainWeight','dailyGoals':{'energyKcal':2200}},{},demo=True)
         self.assertEqual(len(re.findall(rb'/Type\s*/Page\b',pdf)),2)
 
+    def test_four_meal_legacy_plan_stays_compatible(self):
+        plan=copy.deepcopy(PLAN)
+        plan['meals']=[m for m in plan['meals'] if m['mealType']!='morningSnack']
+        pdf=make_pdf(plan,'Exemplo',{}, {},demo=True)
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page\b',pdf)),2)
+
     def test_known_milk_allergy_blocks_incompatible_pdf(self):
         with self.assertRaises(ValueError):
             make_pdf(PLAN,'Exemplo',{}, {'restrictionsAndHealth':'Tenho alergia a leite'})

@@ -53,12 +53,30 @@ class Coaching:
         if command in ('alterar lembretes', 'mudar horarios de agua'):
             self.db.execute("UPDATE coaching SET stage='hours',reminders=0,updated=? WHERE patient_id=?", (time.time(), patient_id))
             return 'Quais horários você prefere? Envie até seis no formato 09:00, 13:00, 17:00 (Brasília). Os lembretes ficam pausados até você confirmar.'
+        if p['stage'] == 'preferences':
+            from menu_coach import MenuCoach
+            menu = MenuCoach(self.db)
+            saved = menu.get(patient_id) or {}
+            data = {k:v for k,v in saved.items() if k != 'stage'}
+            data['foodPreferences'] = text[:800]
+            menu.save(patient_id, saved.get('stage', 'preferences_saved'), data)
+            self.db.execute("UPDATE coaching SET stage='reminders',updated=? WHERE patient_id=?", (time.time(), patient_id))
+            return 'Obrigado por me contar! Vou levar isso em conta nas sugestões.\n\n' + self.question(json.loads(p['hours']))
         if p['stage'] == 'name' or command.startswith('me chame de ') or command.startswith('pode me chamar de '):
             name = re.sub(r'^(?:pode me chamar de|me chame de|meu nome [ée]|sou o|sou a)\s+', '', text.strip(), flags=re.I).strip(' .!')
             if command in ('pular', 'prefiro nao informar'):
                 name = None
             elif not 1 <= len(name) <= 60 or not all(c.isalpha() or c in " '-" for c in name) or len(name.split()) > 6 or plain(name).split()[0] in ('comi', 'bebi', 'quero', 'preciso', 'hoje', 'tenho', 'tomei', 'meu', 'minha'):
                 return 'Me diga só como prefere ser chamado(a), ou responda PULAR. Depois seguimos com seus registros.'
+            if p['stage'] != 'name':
+                self.db.execute('UPDATE coaching SET name=?,updated=? WHERE patient_id=?', (name,time.time(),patient_id))
+                return f'Combinado, vou chamar você de {name}.' if name else 'Tudo bem, seguimos sem usar um nome.'
+            from patient_profile import read_profile, GOALS
+            goal = GOALS.get(read_profile(self.db, patient_id).get('goal'))
+            if goal:
+                self.db.execute("UPDATE coaching SET name=?,stage='preferences',updated=? WHERE patient_id=?", (name,time.time(),patient_id))
+                greeting = f'Prazer, {name}!' if name else 'Vamos nos conhecer melhor!'
+                return greeting + f' Vi no aplicativo que seu objetivo é {goal}.\n\nQuero conhecer sua alimentação para preparar uma sugestão que combine com você. Você costuma comer de tudo ou tem algo que não gosta ou evita?'
             self.db.execute("UPDATE coaching SET name=?,stage='reminders',updated=? WHERE patient_id=?", (name, time.time(), patient_id))
             return (f'Prazer, {name}! ' if name else 'Tudo bem! ') + self.question(json.loads(p['hours']))
         if p['stage'] == 'reminders':

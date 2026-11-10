@@ -46,3 +46,5 @@ Versão 0.6.1: isolamento das chaves locais do diário e do vínculo WhatsApp, l
 Versão 0.7: geração de PDF privado de sugestões gerais e envio pela Evolution, mantendo o registro de fotos/áudios. PDFs usam ReportLab 4.4.9, Copyright (c) ReportLab Inc., sob licença BSD (https://pypi.org/project/reportlab/4.4.9/); a instalação da dependência conserva seus avisos de licença. O exemplo distribuído usa dados fictícios.
 
 Versão 0.8: registro direto de observações visuais estruturadas; associações de arroz simples/batata e referência estimada derivada de cortes bovinos grelhados. Médias e porções são identificadas como estimativas e mantêm a fonte TACO/NEPA/UNICAMP (2011) e IDs utilizados.
+
+A versão 0.9 adapta a apresentação do PDF à referência visual fornecida pelo usuário, com conteúdo dinâmico e identificação Nutri Acompanhamento. Inclui abertura pelo nome/objetivo e preferências persistidas; preserva a licença e os créditos do projeto original.

@@ -16,8 +16,12 @@ class MenuCoach:
         return {'stage': row['stage'], **json.loads(row['data'])} if row else None
 
     def offer(self, patient_id):
-        if self.get(patient_id):
-            return ''
+        profile=self.get(patient_id)
+        if profile:
+            if profile['stage'] != 'preferences_saved':
+                return ''
+            self.save(patient_id,'offer',{k:v for k,v in profile.items() if k != 'stage'})
+            return 'Quer que eu prepare um PDF com sugestões de refeições a partir do seu objetivo e do que você me contou?'
         self.db.execute("INSERT INTO menu_profiles(patient_id,stage) VALUES(?,'offer')", (patient_id,))
         return 'Quer que eu sugira algumas ideias de refeições para a sua rotina?'
 
@@ -56,7 +60,7 @@ class MenuCoach:
                 self.save(patient_id, 'declined', data)
                 return 'Tudo bem. Podemos continuar só com seu diário.'
             if yes or request:
-                data = {'appProfile': app}
+                data = {**data, 'appProfile': app}
                 age = age_of(app)
                 if age is not None:
                     if age < 18:
@@ -96,7 +100,7 @@ class MenuCoach:
                 self.save(patient_id, 'clinical', data)
                 return 'Obrigado por me contar. Para adaptar uma dieta a essa situação, vou precisar de um plano definido pelo seu nutricionista. Por aqui posso ajudar com o diário e orientações gerais, sem alterar seu tratamento.'
             self.save(patient_id, 'routine', data)
-            return 'Como são seus horários, o que você gosta ou evita comer e quanto tempo e orçamento costuma ter para preparar as refeições?'
+            return ('Como são seus horários de refeições no dia a dia? Pode me contar também se prefere opções rápidas e econômicas.' if data.get('foodPreferences') else 'Como são seus horários, o que você gosta ou evita comer e quanto tempo e orçamento costuma ter para preparar as refeições?')
         if stage == 'routine':
             if re.search(r'\b(diabetes|renal|gestante|gravida|amamentando|anorexia|bulimia)\b', plain(json.dumps(data)) + ' ' + command):
                 self.save(patient_id, 'clinical', data)

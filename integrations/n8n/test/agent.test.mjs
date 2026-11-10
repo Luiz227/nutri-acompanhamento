@@ -183,7 +183,7 @@ test('PDF schema is added only to a server-authorized menu request',()=>{
   const normal=makePrompt(job(),'model-test');
   const pdf=makePrompt({...job(),documentRequested:true},'model-test');
   assert.equal(pdf.messages.length,normal.messages.length+1);
-  assert.ok(pdf.messages.some(m=>m.content.includes('Exatamente quatro meals')));
+  assert.ok(pdf.messages.some(m=>m.content.includes('Exatamente cinco meals')));
   const value=parseAssistantResult({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Vou organizar as sugestões.',record:null,plan:{meals:[],shopping:[],tips:[]}})}}]});
   assert.deepEqual(value.plan,{meals:[],shopping:[],tips:[]});
   assert.equal(value.record,null);

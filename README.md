@@ -1,3 +1,7 @@
+# Atualização 0.9: conversa personalizada e modelo de PDF
+
+API 10: abertura com nome e objetivo real do app, preferências guardadas e PDF de duas páginas seguindo a referência visual fornecida. Novo fluxo gera cinco opções de refeições (lanche da manhã opcional); quatro refeições do fluxo anterior continuam aceitas. Veja [como atualizar](deploy/PDF-PERSONALIZADO.md).
+
 # Nutri Acompanhamento — versão de teste
 
 Derivado do [OpenNutriTracker](https://github.com/simonoppowa/OpenNutriTracker),

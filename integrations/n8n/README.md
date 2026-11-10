@@ -1,6 +1,6 @@
 # Agente nutricional: aplicativo + n8n + Evolution API
 
-Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 9**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
+Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 10**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
 
 As verificações locais simulam os serviços. A versão nova ainda precisa ser importada/testada na instância real do operador. Leia [como atualizar e testar](../../deploy/MIDIA-E-ABERTURA.md).
 
@@ -66,3 +66,5 @@ Os testes não chamam IA nem enviam WhatsApp. Cobrem autorização, deduplicaç�
 - [OpenAI: transcrição](https://developers.openai.com/api/docs/guides/speech-to-text)
 - [OpenAI: imagens](https://developers.openai.com/api/docs/guides/images-vision)
 - [IBGE: medidas referidas](https://biblioteca.ibge.gov.br/visualizacao/livros/liv50000.pdf)
+
+A versão 0.9 usa o modelo visual personalizado e cinco opções de refeições no PDF, com preferências persistidas na apresentação. Consulte deploy/PDF-PERSONALIZADO.md.

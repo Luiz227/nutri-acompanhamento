@@ -7,7 +7,7 @@ from coaching import plain
 
 MENU_REQUEST_TEXT = 'Quero sugestões gerais e flexíveis de refeições em um PDF personalizado, usando o objetivo, as restrições e as preferências que informei.'
 
-LABELS = {'breakfast': 'Café da manhã', 'lunch': 'Almoço', 'snack': 'Lanche', 'dinner': 'Jantar'}
+LABELS = {'breakfast': 'Café da manhã', 'morningSnack': 'Lanche da manhã', 'lunch': 'Almoço', 'snack': 'Lanche da tarde', 'dinner': 'Jantar'}
 
 
 def eligible(profile, app, message=''):
@@ -34,15 +34,15 @@ def validate_plan(raw):
             raise ValueError('Não inclua metas ou doses inventadas nas sugestões.')
         return value
     meals = raw.get('meals')
-    if not isinstance(meals, list) or len(meals) != 4:
-        raise ValueError('Organize as quatro refeições.')
+    if not isinstance(meals, list) or len(meals) not in (4, 5):
+        raise ValueError('Organize as refeições do dia.')
     result = {'meals': []}
     for meal in meals:
         if not isinstance(meal, dict) or meal.get('mealType') not in LABELS:
             raise ValueError('Refeição inválida.')
         result['meals'].append({'mealType': meal['mealType'], 'suggestion': text(meal.get('suggestion'), 240),
                                 'alternative': text(meal.get('alternative'), 180)})
-    if {m['mealType'] for m in result['meals']} != set(LABELS):
+    if len({m['mealType'] for m in result['meals']}) != len(meals) or not {'breakfast','lunch','snack','dinner'}.issubset({m['mealType'] for m in result['meals']}):
         raise ValueError('Não repita refeições.')
     for key, maximum, size in [('shopping', 10, 65), ('tips', 3, 160)]:
         values = raw.get(key)
@@ -55,8 +55,7 @@ def validate_plan(raw):
 def make_pdf(plan, name, app, preferences, demo=False):
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.enums import TA_LEFT
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
+    from reportlab.platypus import Paragraph
     from reportlab.lib.pagesizes import A4
     plan = validate_plan(plan)
     if preferences:
@@ -70,67 +69,113 @@ def make_pdf(plan, name, app, preferences, demo=False):
         ]:
             if re.search(trigger,health) and re.search(r'\b(?:'+ingredients+r')\b',foods):
                 raise ValueError('As sugestões precisam respeitar a restrição informada.')
-    green, ink, muted, cream = [colors.HexColor(v) for v in ('#19634D', '#21392F', '#64756A', '#F7F5ED')]
-    w, h = A4
-    width = w-88
-    def style(name, size=11, leading=16, color=ink, font='Helvetica', **kw):
-        return ParagraphStyle(name, fontName=font, fontSize=size, leading=leading, textColor=color, alignment=TA_LEFT, **kw)
-    styles = {'title': style('title',34,39,green,'Helvetica-Bold'), 'section': style('section',21,26,green,'Helvetica-Bold'),
-              'label': style('label',10,14,green,'Helvetica-Bold'), 'body': style('body',11,16),
-              'small': style('small',9,12,muted), 'compact': style('compact',10,13), 'page2title': style('page2title',28,33,green,'Helvetica-Bold'), 'name':style('name',14,19,green,'Helvetica-Bold')}
-    def para(text, key='body'):
-        return Paragraph(escape(str(text)),styles[key])
-    def card(content, background=colors.white):
-        table=Table([[content]],colWidths=[width])
-        table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),background),('BOX',(0,0),(-1,-1),.5,colors.HexColor('#DDE6DE')),
-                                  ('LEFTPADDING',(0,0),(-1,-1),16),('RIGHTPADDING',(0,0),(-1,-1),16),
-                                  ('TOPPADDING',(0,0),(-1,-1),12),('BOTTOMPADDING',(0,0),(-1,-1),12)]))
-        return table
+    from reportlab.pdfgen import canvas as pdfcanvas
+    green, accent, gold, ink, muted, cream, pale = [colors.HexColor(v) for v in
+        ('#173E35','#327760','#D7AD63','#24413B','#687D76','#F8F7F3','#EDF3ED')]
+    w,h=A4
     out=BytesIO()
-    doc=SimpleDocTemplate(out,pagesize=A4,leftMargin=44,rightMargin=44,topMargin=72,bottomMargin=60,
-                         title='Seu guia de alimentação | Nutri Acompanhamento',author='Nutri Acompanhamento')
-    date=datetime.now(timezone(timedelta(hours=-3))).strftime('%d/%m/%Y')
-    def page(canvas, document):
-        canvas.saveState()
-        canvas.setFillColor(cream);canvas.rect(0,0,w,h,fill=1,stroke=0)
-        canvas.setFillColor(green);canvas.circle(49,h-37,7,fill=1,stroke=0)
-        canvas.setFont('Helvetica-Bold',10);canvas.drawString(64,h-41,'NUTRI ACOMPANHAMENTO')
-        canvas.setFillColor(muted);canvas.setFont('Helvetica',8)
-        canvas.drawRightString(w-44,h-41,'EXEMPLO • DADOS FICTÍCIOS' if demo else date)
-        canvas.setStrokeColor(colors.HexColor('#D6DED4'));canvas.line(44,43,w-44,43)
-        canvas.drawString(44,29,'Sugestões gerais de alimentação • Use conforme sua rotina')
-        canvas.drawRightString(w-44,29,f'{document.page} / 2')
-        canvas.restoreState()
+    c=pdfcanvas.Canvas(out,pagesize=A4)
+    c.setTitle('Seu plano alimentar | Nutri Acompanhamento')
+    c.setAuthor('Nutri Acompanhamento')
     name=str(name or 'Você').strip()[:55]
-    story=[para('Comer bem, do seu jeito.','title'),Spacer(1,12),para(f'Um guia preparado para {name}.','name'),Spacer(1,7),
-           para('Ideias simples para variar suas refeições, respeitando o que você contou sobre sua rotina. As sugestões são flexíveis: escolha o que faz sentido para você.'),Spacer(1,16)]
+    date=datetime.now(timezone(timedelta(hours=-3))).strftime('%d/%m/%Y')
+    def paragraph(value,x,top,width,size=10,leading=14,color=ink,bold=False):
+        st=ParagraphStyle('text',fontName='Helvetica-Bold' if bold else 'Helvetica',fontSize=size,leading=leading,textColor=color)
+        p=Paragraph(escape(str(value)),st)
+        _,height=p.wrap(width,1000)
+        p.drawOn(c,x,h-top-height)
+        return height
+    def box(x,top,width,height,fill=colors.white):
+        c.setFillColor(fill);c.roundRect(x,h-top-height,width,height,13,stroke=0,fill=1)
+    def header(kicker,title,subtitle):
+        c.setFillColor(cream);c.rect(0,0,w,h,stroke=0,fill=1)
+        c.saveState()
+        path=c.beginPath();path.rect(0,h-175,w,175);c.clipPath(path,stroke=0)
+        c.setFillColor(green);c.rect(0,h-175,w,175,stroke=0,fill=1)
+        c.setFillColor(gold);c.circle(w-38,h-52,84,stroke=0,fill=1)
+        c.setFillColor(accent);c.circle(w-13,h-146,88,stroke=0,fill=1)
+        c.restoreState()
+        paragraph(kicker,43,39,420,9,12,colors.HexColor('#CBDFD2'),True)
+        paragraph(title,43,68,440,27,33,colors.white,True)
+        paragraph(subtitle,43,112,420,10,14,colors.HexColor('#D8E8DE'))
+    def footer(number):
+        c.setStrokeColor(colors.HexColor('#DEE5DE'));c.line(42,52,w-42,52)
+        paragraph('NUTRI ACOMPANHAMENTO  /  SUGESTÕES PERSONALIZADAS',42,h-43,450,7,10,muted)
+        c.setFillColor(accent);c.setFont('Helvetica-Bold',8);c.drawRightString(w-42,34,f'{number:02d} / 02')
+    header('BEM-ESTAR  /  NUTRIÇÃO','Seu plano alimentar','Equilíbrio, variedade e escolhas possíveis no dia a dia.')
+    box(42,187,w-84,42)
+    paragraph('NOME: '+name,57,201,350,9,12)
+    paragraph('DATA: '+date,440,201,100,9,12)
     objective=GOALS.get(app.get('goal'),'organizar a alimentação')
-    facts=[para('SEU OBJETIVO','label'),para(objective.capitalize())]
+    paragraph('UM DIA COM POSSIBILIDADES',43,245,490,12,16,green,True)
+    summary='Seu objetivo: '+objective+'. Sugestões flexíveis para sua rotina.'
     energy=app.get('dailyGoals',{}).get('energyKcal')
-    if isinstance(energy,(float,int)) and not isinstance(energy,bool) and 0 < energy < 12000:
-        facts += [Spacer(1,5),para(f'Meta já definida no aplicativo: {energy:g} kcal/dia. Este guia não recalcula nem altera essa meta.','small')]
-    story += [card(facts,colors.HexColor('#EBF1E9')),Spacer(1,17),para('Um dia com possibilidades','section'),Spacer(1,12)]
-    for kind in LABELS:
-        meal=next(m for m in plan['meals'] if m['mealType']==kind)
-        story += [KeepTogether([card([para(LABELS[kind].upper(),'label'),Spacer(1,4),para(meal['suggestion'])]),Spacer(1,9)])]
-    story += [PageBreak(),para('Variedade sem complicar.','page2title'),Spacer(1,12),para('Trocas para a sua rotina','section'),Spacer(1,10)]
-    for kind in LABELS:
-        meal=next(m for m in plan['meals'] if m['mealType']==kind)
-        story += [para(LABELS[kind],'label'),para(meal['alternative'],'compact'),Spacer(1,6)]
-    story += [Spacer(1,6),para('Uma lista para facilitar','section'),Spacer(1,9)]
-    rows=[]
-    items=plan['shopping']
-    for i in range(0,len(items),2):
-        rows.append([para('• '+items[i],'compact'),para('• '+items[i+1],'compact') if i+1<len(items) else ''])
-    shopping=Table(rows,colWidths=[width/2,width/2]);shopping.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
-    story += [shopping,Spacer(1,12)]
-    for tip in plan['tips']:
-        story += [para(tip,'small'),Spacer(1,4)]
-    story += [Spacer(1,8),card([para('Para lembrar','label'),para('Este é um exemplo de alimentação, não uma prescrição clínica. Confira os rótulos e respeite suas alergias e restrições. Para adaptar quantidades ou tratar uma condição de saúde, converse com seu nutricionista.','small')],colors.HexColor('#EBF1E9'))]
-    doc.build(story,onFirstPage=page,onLaterPages=page)
-    if doc.page != 2:
-        raise ValueError('O conteúdo excede o limite visual do PDF. Encurte as sugestões.')
+    if isinstance(energy,(int,float)) and not isinstance(energy,bool) and 0<energy<12000:
+        summary=f'Seu objetivo: {objective}. Meta do aplicativo: {energy:g} kcal/dia.'
+    paragraph(summary,43,267,490,9,12,muted)
+    meals=sorted(plan['meals'],key=lambda m:list(LABELS).index(m['mealType']))
+    # Bounded content is fitted inside each card; never clips longer valid plans.
+    count=len(meals);gap=11;card_h=min(96,(487-(count-1)*gap)/count)
+    top=292
+    for index,meal in enumerate(meals,1):
+        box(42,top,w-84,card_h)
+        box(55,top+13,38,32,pale)
+        paragraph(f'{index:02d}',64,top+22,28,13,16,accent,True)
+        paragraph(LABELS[meal['mealType']].upper(),108,top+14,w-165,10,13,green,True)
+        if meal['mealType']=='morningSnack':
+            suggestion='Se fizer sentido para sua fome: '+meal['suggestion']
+        else:
+            suggestion=meal['suggestion']
+        alternative='Alternativa: '+meal['alternative']
+        text_width=w-165
+        size=9.2
+        while size>=7.2:
+            def measure(text):
+                p=Paragraph(escape(text),ParagraphStyle('fit',fontName='Helvetica',fontSize=size,leading=size+2.3))
+                return p.wrap(text_width,1000)[1]
+            a,b=measure(suggestion),measure(alternative)
+            if a+b+39<=card_h:break
+            size-=.2
+        if a+b+39>card_h:raise ValueError('Sugestão longa demais para o cartão do PDF.')
+        paragraph(suggestion,108,top+32,text_width,size,size+2.3)
+        paragraph(alternative,108,top+35+a,text_width,size,size+2.3,muted)
+        top+=card_h+gap
+    footer(1);c.showPage()
+    header('ESCOLHAS INTELIGENTES','Varie com liberdade','Ideias escolhidas a partir das suas preferências e rotina.')
+    paragraph('TROCAS PARA O DIA A DIA',43,207,480,12,16,green,True)
+    top=233
+    for meal in meals:
+        box(42,top,w-84,48)
+        c.setFillColor(accent);c.roundRect(42,h-top-48,5,48,2,stroke=0,fill=1)
+        paragraph(LABELS[meal['mealType']].upper(),59,top+10,w-118,9,12,green,True)
+        paragraph(meal['alternative'],59,top+24,w-118,8.3,10.5,muted)
+        top+=55
+    top+=10
+    box(42,top,w-84,70,pale)
+    paragraph('HIDRATAÇÃO E ROTINA',59,top+15,450,11,14,green,True)
+    water=app.get('dailyGoals',{}).get('waterMl')
+    hydration='Mantenha água por perto ao longo do dia. Respeite sua sede e as orientações de quem acompanha você.'
+    if isinstance(water,(int,float)) and not isinstance(water,bool) and 0<water<=20000:
+        hydration=f'Meta de água já definida no aplicativo: {water:g} ml/dia. Distribua o consumo pela rotina e respeite as orientações do seu profissional.'
+    paragraph(hydration,59,top+37,w-118,9.3,13)
+    top+=85
+    paragraph('PARA FACILITAR SUAS ESCOLHAS',43,top,480,11,14,green,True)
+    # The shopping list is generated for this person, never generic allergen swaps.
+    shopping='Para as compras: '+', '.join(plan['shopping'])+'.'
+    tips=' '.join(plan['tips'])
+    size=8.8
+    while size>=7.2:
+        st=ParagraphStyle('fit2',fontSize=size,leading=size+2,fontName='Helvetica')
+        needed=sum(Paragraph(escape(t),st).wrap(w-86,1000)[1] for t in (shopping,tips))
+        if top+23+needed+8<=737:break
+        size-=.2
+    if top+23+needed+8>737:raise ValueError('Conteúdo longo demais para a segunda página.')
+    used=paragraph(shopping,43,top+23,w-86,size,size+2,muted)
+    paragraph(tips,43,top+27+used,w-86,size,size+2,muted)
+    box(42,746,w-84,37)
+    note=('EXEMPLO COM DADOS FICTÍCIOS. ' if demo else '')+'Sugestões educativas, não uma prescrição clínica. Respeite suas alergias e restrições; necessidades específicas pedem acompanhamento nutricional.'
+    paragraph(note,53,754,w-106,7.3,9.5,muted)
+    footer(2);c.showPage();c.save()
     data=out.getvalue()
-    if len(data)>500000:
-        raise ValueError('Documento muito grande.')
+    if len(data)>500000:raise ValueError('Documento muito grande.')
     return data
