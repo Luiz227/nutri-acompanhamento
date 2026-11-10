@@ -4,6 +4,10 @@ Derivado do [OpenNutriTracker](https://github.com/simonoppowa/OpenNutriTracker),
 com autoria e histórico preservados, sob [GNU GPLv3](LICENSE).
 Veja [créditos e alterações](NOTICE.md) e [documentação original](README.upstream.md).
 
+## Correção de abertura 0.6.1
+
+O diagnóstico no Galaxy identificou falha de descriptografia causada por conflito entre configurações do armazenamento seguro. A correção separa as chaves do diário e do WhatsApp e não reinicia bancos antigos automaticamente. Leia [o diagnóstico e os limites da recuperação](deploy/RECUPERACAO-ARMAZENAMENTO.md).
+
 ## Atualização 0.6
 
 Fotos de refeições, áudios curtos, porções por unidade com referências do IBGE e abertura com progresso em português. Veja [como atualizar e testar](deploy/MIDIA-E-ABERTURA.md). A confirmação no Galaxy ainda exige teste no aparelho.

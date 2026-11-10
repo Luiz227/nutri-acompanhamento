@@ -159,6 +159,7 @@ Future<void> initLocator({void Function(String)? onStage}) async {
   // profile on first run) before anything reads per-profile data.
   onStage?.call('Carregando seu perfil');
   await bootstrapActiveProfile(hiveDBProvider, secureAppStorageProvider);
+  await secureAppStorageProvider.preserveValidatedKey(key);
   locator.registerLazySingleton<SecureAppStorageProvider>(
     () => secureAppStorageProvider,
   );

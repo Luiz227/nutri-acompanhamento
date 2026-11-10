@@ -46,6 +46,14 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nutri/legacy-storage")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "read") { result.notImplemented() }
+                else {
+                    try { result.success(LegacyStorageReader.read(this, call.argument<String>("key") ?: "")) }
+                    catch (_: Exception) { result.error("legacy_storage_unavailable", "Não foi possível ler o armazenamento anterior com segurança.", null) }
+                }
+            }
 
         // A cold start: the launching intent is the one held by the activity.
         // Or-ing rather than assigning so an intent that arrived through

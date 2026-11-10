@@ -6,8 +6,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:opennutritracker/core/utils/hive_db_provider.dart';
 import 'package:opennutritracker/core/utils/hive_storage_integrity_exception.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:opennutritracker/core/utils/legacy_storage_reader.dart';
 
 class SecureAppStorageProvider {
+  SecureAppStorageProvider({this.readLegacy = LegacyStorageReader.read});
+  final Future<({bool present, String? value})> Function(String) readLegacy;
   static const _sharedPrefsName = "SharedPrefs";
   static const _hiveEncryptionTag = "HiveEncryptionTag";
 
@@ -41,15 +44,28 @@ class SecureAppStorageProvider {
   );
 
   final _secureStorage = const FlutterSecureStorage(
-    aOptions: _androidOptions,
+    // Full namespace isolation includes wrapping keys, unlike the legacy
+    // sharedPreferencesName option. Never let WhatsApp migrate the Hive key.
+    aOptions: AndroidOptions(
+      storageNamespace: 'nutri_core_v2',
+      resetOnError: false,
+      migrateWithBackup: true,
+    ),
     iOptions: _iOSOptions,
   );
 
   Future<Uint8List> getHiveEncryptionKey() async {
-    if (await _secureStorage.containsKey(key: _hiveEncryptionTag)) {
-      final raw = await _secureStorage.read(key: _hiveEncryptionTag);
+    final current = await _secureStorage.read(key: _hiveEncryptionTag);
+    final legacy = current == null
+        ? await readLegacy(_hiveEncryptionTag)
+        : (present: false, value: null);
+    if (current != null || legacy.present) {
+      final raw = current ?? legacy.value;
       if (raw == null || raw.isEmpty) {
-        throw HiveStorageIntegrityException.emptyKey();
+        throw HiveStorageIntegrityException(
+          'hive_legacy_key_unreadable',
+          'The existing encrypted key cannot be read. Original files were preserved; refusing to reset storage.',
+        );
       }
       final Uint8List key;
       try {
@@ -91,6 +107,12 @@ class SecureAppStorageProvider {
     return encryptionKey;
   }
 
+  // Call only after Hive has successfully opened and verified existing files.
+  Future<void> preserveValidatedKey(Uint8List key) => _secureStorage.write(
+    key: _hiveEncryptionTag,
+    value: base64UrlEncode(key),
+  );
+
   /// True when the app documents directory already has at least one
   /// non-empty `*.hive` file. Used to distinguish first install from a
   /// partial secure-storage loss.
@@ -107,7 +129,9 @@ class SecureAppStorageProvider {
   }
 
   Future<String?> getActiveProfileId() async {
-    return _secureStorage.read(key: _activeProfileTag);
+    final current = await _secureStorage.read(key: _activeProfileTag);
+    if (current != null) return current;
+    return (await readLegacy(_activeProfileTag)).value;
   }
 
   Future<void> setActiveProfileId(String profileId) async {

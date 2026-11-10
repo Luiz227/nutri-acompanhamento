@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:opennutritracker/core/utils/legacy_storage_reader.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:opennutritracker/core/utils/hive_db_provider.dart';
@@ -36,7 +37,13 @@ class BridgeSession {
   final Future<Map<String, dynamic>> Function() readProfile;
   BridgeSession(
     this.profileId, {
-    this.storage = const FlutterSecureStorage(),
+    this.storage = const FlutterSecureStorage(
+      aOptions: AndroidOptions(
+        storageNamespace: 'nutri_whatsapp_v2',
+        resetOnError: false,
+        migrateWithBackup: true,
+      ),
+    ),
     Future<String> Function()? resolveUrl,
     NutriBridgeClient Function(String)? createClient,
     Future<Map<String, dynamic>> Function()? readProfile,
@@ -119,7 +126,11 @@ class BridgeSession {
   }
 
   Future<Map<String, dynamic>> load() async {
-    final raw = await storage.read(key: key);
+    var raw = await storage.read(key: key);
+    if (raw == null) {
+      raw = (await LegacyStorageReader.read(key)).value;
+      if (raw != null) await storage.write(key: key, value: raw);
+    }
     return raw == null
         ? <String, dynamic>{}
         : jsonDecode(raw) as Map<String, dynamic>;
