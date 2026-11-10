@@ -102,6 +102,8 @@ class Messaging:
             prefs = self.store.coaching.get(p['id']) if p else None
             command = text.strip().upper()
             immediate = command in ('SAIR', 'PARAR', 'CANCELAR', 'STOP', 'CONFIRMAR', 'CANCELAR REGISTRO',
+                                    'NAO QUERO PDF', 'NÃO QUERO PDF', 'CANCELAR PDF',
+                                    'NAO QUERO MAIS PDF', 'NÃO QUERO MAIS PDF', 'CANCELAR GUIA',
                                     'PARAR LEMBRETES', 'CANCELAR LEMBRETES', 'PARAR LEMBRETES DE ÁGUA',
                                     'CANCELAR LEMBRETES DE ÁGUA', 'ALTERAR LEMBRETES', 'ATIVAR LEMBRETES') or re.fullmatch(r'\d{6}', command)
             if not p or not prefs or prefs['stage'] != 'done' or immediate:

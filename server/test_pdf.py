@@ -2,6 +2,7 @@ import base64
 import copy
 import re
 import unittest
+from unittest.mock import patch
 import test_app as fixtures
 from meal_pdf import make_pdf, validate_plan
 from example_menu import PLAN
@@ -98,7 +99,8 @@ class PdfTests(unittest.TestCase):
         dispatch=self.store.reserve({'eventId':job['eventId'],'userId':job['userId'],'phone':job['phone'],'plan':PLAN},'nutri')
         first=self.store.messaging.authorize(dispatch['parts'][0],'nutri')
         self.store.messaging.receipt({'partId':first['partId'],'status':'accepted'})
-        decline=self.store.ingest(self.event('Não quero PDF','pdf-decline-command'),'nutri')
+        with patch.object(self.store.messaging.changed,'wait',side_effect=AssertionError('A recusa do PDF não pode esperar o agrupamento.')):
+            decline=self.store.messaging.collect(self.event('Não quero PDF','pdf-decline-command'),'nutri')
         self.assertTrue(decline['consentActive'])
         self.assertFalse(decline['documentRequested'])
         self.assertFalse(self.store.messaging.authorize(dispatch['parts'][1],'nutri')['approved'])
