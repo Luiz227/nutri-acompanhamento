@@ -10,6 +10,7 @@
 !server/portions.py
 !server/meal_pdf.py
 !server/photo_meals.py
+!server/daily_progress.py
 !server/requirements.txt
 !assets/
 !assets/data/

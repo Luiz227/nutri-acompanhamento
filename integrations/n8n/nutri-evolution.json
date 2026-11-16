@@ -607,8 +607,8 @@
       "webhookId": "nutri-pausa-partes"
     },
     {
-      "id": "e-pdf-",
-      "name": "É PDF?",
+      "id": "e-imagem-ou-pdf-",
+      "name": "É imagem ou PDF?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
@@ -625,8 +625,8 @@
           },
           "conditions": [
             {
-              "id": "É PDF?",
-              "leftValue": "={{ $json.mediaType === \"document\" }}",
+              "id": "É imagem ou PDF?",
+              "leftValue": "={{ $json.mediaType === \"document\" || $json.mediaType === \"image\" }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -641,8 +641,8 @@
       }
     },
     {
-      "id": "enviar-pdf-pela-evolution",
-      "name": "Enviar PDF pela Evolution",
+      "id": "enviar-midia-pela-evolution",
+      "name": "Enviar mídia pela Evolution",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -656,7 +656,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({number:$json.number,mediatype:\"document\",mimetype:\"application/pdf\",fileName:$json.fileName,caption:$json.text,media:$json.media}) }}",
+        "jsonBody": "={{ JSON.stringify({number:$json.number,mediatype:$json.mediaType,mimetype:$json.mimetype,fileName:$json.fileName,caption:$json.text,media:$json.media}) }}",
         "options": {
           "timeout": 30000
         }
@@ -1023,11 +1023,11 @@
     }
   ],
   "connections": {
-    "É PDF?": {
+    "É imagem ou PDF?": {
       "main": [
         [
           {
-            "node": "Enviar PDF pela Evolution",
+            "node": "Enviar mídia pela Evolution",
             "type": "main",
             "index": 0
           }
@@ -1041,7 +1041,7 @@
         ]
       ]
     },
-    "Enviar PDF pela Evolution": {
+    "Enviar mídia pela Evolution": {
       "main": [
         [
           {
@@ -1471,7 +1471,7 @@
       "main": [
         [
           {
-            "node": "É PDF?",
+            "node": "É imagem ou PDF?",
             "type": "main",
             "index": 0
           }

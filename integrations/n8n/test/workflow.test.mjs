@@ -58,13 +58,13 @@ function simulate(trigger, body, options = {}) {
         case 'Concluir leitura e agrupar': value=options.automaticPhoto?{...job,action:'reply',text:'Vou registrar os alimentos identificados na foto.'}:{...job,message:payload.event.text};break;
         case 'Consultar servidor do aplicativo': value = options.ignore ? { action: 'ignore' } : job; break;
         case 'Consultar IA': value = { choices: [{ message: { content: JSON.stringify({reply:'Como foi seu almoço?',record:null,...(options.pdf?{plan:{meals:[],shopping:[],tips:[]}}:{})}) }, finish_reason: 'stop' }] }; break;
-        case 'Autorizar e reservar envio': texts = options.parts ?? (options.pdf ? ['Seu guia está pronto','PDF'] : [payload.candidate]); value = options.block ? { approved: false } : {
+        case 'Autorizar e reservar envio': texts = options.parts ?? ((options.pdf || options.progress) ? ['Registro salvo','Anexo'] : [payload.candidate]); value = options.block ? { approved: false } : {
           ...event, approved: true, instance: 'nutri', text: payload.candidate,
           parts: texts.map((_,index)=>({dispatchId:'dispatch-demo-0001',index})),
           dispatchId: 'dispatch-demo-0001', expiresAt: new Date(Date.now() + 30000).toISOString(),
         }; break;
-        case 'Revalidar parte': value = options.cancelAfterFirst && payload.index > 0 ? {approved:false} : {approved:true,partId:'part-demo-'+payload.index,number:event.phone,instance:'nutri',text:texts[payload.index],...(options.pdf && payload.index===1 ? {mediaType:'document',mimetype:'application/pdf',fileName:'seu-guia-alimentar.pdf',media:'JVBERi0xLjQK'} : {})}; break;
-        case 'Enviar PDF pela Evolution':
+        case 'Revalidar parte': value = options.cancelAfterFirst && payload.index > 0 ? {approved:false} : {approved:true,partId:'part-demo-'+payload.index,number:event.phone,instance:'nutri',text:texts[payload.index],...(options.progress && payload.index===1 ? {mediaType:'image',mimetype:'image/png',fileName:'progresso-do-dia.png',media:'iVBORw0KGgo='} : options.pdf && payload.index===1 ? {mediaType:'document',mimetype:'application/pdf',fileName:'seu-guia-alimentar.pdf',media:'JVBERi0xLjQK'} : {})}; break;
+        case 'Enviar mídia pela Evolution':
         case 'Enviar pela Evolution': value = options.timeout ? { error: 'timeout' } : { key: { id: 'evolution-out-1' } }; break;
         case 'Salvar resultado no servidor': value = { continue: payload.status === 'accepted' }; break;
         default: throw new Error(name);
@@ -149,14 +149,14 @@ test('photo and audio graph authorize before download, then collect interpretati
 test('PDF is sent as a document only after text and part authorization, and opt-out stops it',()=>{
   const calls=simulate('Mensagem da Evolution',message('Quero sugestões em PDF'),{pdf:true});
   const names=calls.map(c=>c.name);
-  assert.ok(names.indexOf('Enviar pela Evolution')<names.indexOf('Enviar PDF pela Evolution'));
-  const file=calls.find(c=>c.name==='Enviar PDF pela Evolution');
+  assert.ok(names.indexOf('Enviar pela Evolution')<names.indexOf('Enviar mídia pela Evolution'));
+  const file=calls.find(c=>c.name==='Enviar mídia pela Evolution');
   assert.match(file.url,/message\/sendMedia\/nutri$/);
   assert.equal(file.payload.mimetype,'application/pdf');assert.equal(file.payload.mediatype,'document');
   assert.equal(file.payload.fileName,'seu-guia-alimentar.pdf');
   assert.ok(calls.find(c=>c.name==='Autorizar e reservar envio').payload.plan);
   const blocked=simulate('Mensagem da Evolution',message('Quero PDF'),{pdf:true,cancelAfterFirst:true});
-  assert.equal(blocked.filter(c=>c.name==='Enviar PDF pela Evolution').length,0);
+  assert.equal(blocked.filter(c=>c.name==='Enviar mídia pela Evolution').length,0);
 });
 
 
@@ -168,4 +168,14 @@ test('recognized photo passes structured foods to backend and bypasses the conve
   assert.ok(calls.some(c=>c.name==='Ler foto com IA'));
   assert.equal(calls.some(c=>c.name==='Consultar IA'),false);
   assert.ok(calls.some(c=>c.name==='Enviar pela Evolution'));
+});
+
+
+test('envia o cartão de progresso como imagem depois do recibo', () => {
+  const calls = simulate('Mensagem da Evolution', message('Jantei arroz'), {progress: true});
+  const attachment = calls.find(call => call.name === 'Enviar mídia pela Evolution');
+  assert.ok(calls.findIndex(call => call.name === 'Enviar pela Evolution') < calls.indexOf(attachment));
+  assert.equal(attachment.payload.mediatype, 'image');
+  assert.equal(attachment.payload.mimetype, 'image/png');
+  assert.equal(attachment.payload.fileName, 'progresso-do-dia.png');
 });

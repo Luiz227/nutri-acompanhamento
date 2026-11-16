@@ -189,7 +189,7 @@ class Messaging:
         if document is not None:
             part_id = str(uuid.uuid4())
             self.db.execute('INSERT INTO dispatch_parts(id,dispatch_id,position,text) VALUES(?,?,?,?)',
-                            (part_id, dispatch_id, len(parts), 'Seu guia de alimentação'))
+                            (part_id, dispatch_id, len(parts), 'Seu progresso de hoje' if document.startswith(b'\x89PNG\r\n\x1a\n') else 'Seu guia de alimentação'))
             self.db.execute('INSERT INTO dispatch_documents VALUES(?,?,?)', (dispatch_id,part_id,document))
             parts.append('document')
         return [{'dispatchId': dispatch_id, 'index': index} for index in range(len(parts))]
@@ -215,12 +215,16 @@ class Messaging:
             if previous:
                 return {'approved': False}
             document = self.db.execute('SELECT payload FROM dispatch_documents WHERE part_id=?', (row['id'],)).fetchone()
-            if document and (self.store.menu.get(row['patient_id']) or {}).get('stage') != 'ready':
+            is_image = document and document['payload'].startswith(b'\x89PNG\r\n\x1a\n')
+            if document and not is_image and (self.store.menu.get(row['patient_id']) or {}).get('stage') != 'ready':
                 return {'approved': False}
             self.db.execute("UPDATE dispatch_parts SET status='reserved' WHERE id=?", (row['id'],))
             result = {'approved': True, 'partId': row['id'], 'dispatchId': row['dispatch_id'],
                     'number': row['phone'], 'instance': instance, 'text': row['text']}
-            if document:
+            if is_image:
+                result.update(mediaType='image', mimetype='image/png', fileName='progresso-do-dia.png',
+                              media=base64.b64encode(document['payload']).decode('ascii'))
+            elif document:
                 result.update(mediaType='document', mimetype='application/pdf', fileName='seu-guia-alimentar.pdf',
                               media=base64.b64encode(document['payload']).decode('ascii'))
             return result

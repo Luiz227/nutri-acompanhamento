@@ -113,12 +113,12 @@ add('Pausa entre partes', 'wait', 1.1, {resume: 'timeInterval', amount: 2, unit:
 nodes.find(n => n.name === 'Enviar pela Evolution').position = [4050, -120];
 classify.position = [4260, -120]; receiptNode.position = [4480, -120];
 
-condition('É PDF?', '={{ $json.mediaType === "document" }}', 4040, 60);
-http('Enviar PDF pela Evolution', '={{ $("Configurar conexões").first().json.config.evolutionBaseUrl + "/message/sendMedia/" + encodeURIComponent($json.instance) }}',
-  '={{ JSON.stringify({number:$json.number,mediatype:"document",mimetype:"application/pdf",fileName:$json.fileName,caption:$json.text,media:$json.media}) }}',
+condition('É imagem ou PDF?', '={{ $json.mediaType === "document" || $json.mediaType === "image" }}', 4040, 60);
+http('Enviar mídia pela Evolution', '={{ $("Configurar conexões").first().json.config.evolutionBaseUrl + "/message/sendMedia/" + encodeURIComponent($json.instance) }}',
+  '={{ JSON.stringify({number:$json.number,mediatype:$json.mediaType,mimetype:$json.mimetype,fileName:$json.fileName,caption:$json.text,media:$json.media}) }}',
   'Nutri - Evolution (apikey)',4260,60,{onError:'continueRegularOutput'});
-link('É PDF?', 'Enviar PDF pela Evolution');link('É PDF?','Enviar pela Evolution',1);
-link('Enviar PDF pela Evolution','Classificar resultado do envio');
+link('É imagem ou PDF?', 'Enviar mídia pela Evolution');link('É imagem ou PDF?','Enviar pela Evolution',1);
+link('Enviar mídia pela Evolution','Classificar resultado do envio');
 
 // Media is authorized by the backend before any provider download or AI cost.
 condition('Tem mídia?', '={{ ["image","audio"].includes($json.mediaType) }}', 820, 400);
@@ -173,7 +173,7 @@ link('Preparar partes', 'Enviar uma parte por vez');
 link('Enviar uma parte por vez', 'Concluir evento', 0);
 link('Enviar uma parte por vez', 'Revalidar parte', 1);
 link('Revalidar parte', 'Parte autorizada?');
-link('Parte autorizada?', 'É PDF?');
+link('Parte autorizada?', 'É imagem ou PDF?');
 link('Parte autorizada?', 'Concluir evento', 1); link('Enviar pela Evolution', 'Classificar resultado do envio');
 link('Classificar resultado do envio', 'Salvar resultado no servidor'); link('Salvar resultado no servidor', 'Continuar partes?');
 link('Continuar partes?', 'Pausa entre partes');

@@ -1,6 +1,6 @@
 # Agente nutricional: aplicativo + n8n + Evolution API
 
-Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 10**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
+Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 11**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
 
 As verificações locais simulam os serviços. A versão nova ainda precisa ser importada/testada na instância real do operador. Leia [como atualizar e testar](../../deploy/MIDIA-E-ABERTURA.md).
 
@@ -29,7 +29,7 @@ Leia [FOTO-AUTOMATICA.md](../../deploy/FOTO-AUTOMATICA.md): análise visual estr
 
 ## PDF de sugestões (0.7)
 
-Leia [FOTOS-AUDIOS-PDF.md](../../deploy/FOTOS-AUDIOS-PDF.md). O servidor gera um PDF privado de duas páginas com sugestões estruturadas da IA; o nó Enviar PDF pela Evolution entrega como documento. Sugestões não são lançadas como consumo no aplicativo.
+Leia [FOTOS-AUDIOS-PDF.md](../../deploy/FOTOS-AUDIOS-PDF.md). O servidor gera um PDF privado de duas páginas com sugestões estruturadas da IA; o nó Enviar mídia pela Evolution entrega como documento. Sugestões não são lançadas como consumo no aplicativo.
 
 ## Caminho da conversa
 
@@ -68,3 +68,5 @@ Os testes não chamam IA nem enviam WhatsApp. Cobrem autorização, deduplicaç�
 - [IBGE: medidas referidas](https://biblioteca.ibge.gov.br/visualizacao/livros/liv50000.pdf)
 
 A versão 0.9 usa o modelo visual personalizado e cinco opções de refeições no PDF, com preferências persistidas na apresentação. Consulte deploy/PDF-PERSONALIZADO.md.
+
+**Progresso do dia.** Após salvar o jantar de hoje ou uma refeição indicada como a última do dia, o servidor envia um cartão PNG pelo mesmo nó de mídia, depois do recibo. O cartão usa os registros confirmados disponíveis no servidor e as metas sincronizadas do aplicativo. O fechamento segue o horário de Brasília.

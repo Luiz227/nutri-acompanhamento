@@ -1,0 +1,55 @@
+import base64
+from io import BytesIO
+import unittest
+from unittest.mock import patch
+
+from PIL import Image
+import test_app as fixtures
+from daily_progress import render_card
+
+
+class ProgressTests(unittest.TestCase):
+    setUp = fixtures.BridgeTests.setUp
+    tearDown = fixtures.BridgeTests.tearDown
+    event = fixtures.BridgeTests.event
+    verify = fixtures.BridgeTests.verify
+
+    def save(self, event_id, message, record):
+        job = self.store.ingest(self.event(message, event_id), 'nutri')
+        return self.store.reserve(dict(eventId=event_id, userId=job['userId'], phone=job['phone'],
+                                       candidate='Anotei.', record=record), 'nutri')
+
+    def test_progress_uses_todays_confirmed_records_and_sends_after_receipt(self):
+        self.verify()
+        self.store.allow_ai = True
+        self.store.context(self.enrollment['token'], {'profile': {'dailyGoals': {'waterMl': 2000}}})
+        water = {'kind': 'water', 'text': 'Água', 'quantity': 500, 'unit': 'ml'}
+        self.save('progress-water', 'Bebi água', water)
+        meal = {'kind': 'meal', 'text': 'Arroz, tipo 1, cozido', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'}
+        with patch('daily_progress.render_card', wraps=render_card) as render:
+            self.save('progress-lunch', 'Almocei arroz', meal)
+            render.assert_not_called()
+            dinner = self.save('progress-dinner', 'Jantei arroz', {**meal, 'mealType': 'dinner'})
+            _, totals, goals, missing, _ = render.call_args.args
+            self.assertEqual(totals['waterMl'], 500)
+            self.assertGreater(totals['energyKcal'], 200)
+            self.assertEqual(goals['waterMl'], 2000)
+            self.assertFalse(missing)
+        parts = dinner['parts']
+        self.assertFalse(self.store.messaging.authorize(parts[-1], 'nutri')['approved'])
+        for part in parts[:-1]:
+            auth = self.store.messaging.authorize(part, 'nutri')
+            self.store.messaging.receipt({'partId': auth['partId'], 'status': 'accepted'})
+        image = self.store.messaging.authorize(parts[-1], 'nutri')
+        self.assertEqual(image['mediaType'], 'image')
+        with Image.open(BytesIO(base64.b64decode(image['media']))) as png:
+            self.assertEqual(png.format, 'PNG')
+            self.assertEqual(png.size, (720, 930))
+        self.assertFalse(self.store.messaging.authorize(parts[-1], 'nutri')['approved'])
+
+    def test_explicit_last_meal_before_dinner(self):
+        self.verify()
+        self.store.allow_ai = True
+        self.save('progress-final-lunch', 'Almocei arroz, minha última refeição do dia', {
+            'kind': 'meal', 'text': 'Arroz, tipo 1, cozido', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'})
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM dispatch_documents').fetchone()[0], 1)
