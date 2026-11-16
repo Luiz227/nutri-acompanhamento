@@ -138,7 +138,10 @@ class Records:
           seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
           patient_id TEXT NOT NULL REFERENCES patients(id), event_id TEXT UNIQUE NOT NULL,
           payload TEXT NOT NULL, status TEXT NOT NULL, created REAL NOT NULL, confirmed REAL);
-          CREATE INDEX IF NOT EXISTS records_owner ON records(patient_id,seq);''')
+          CREATE INDEX IF NOT EXISTS records_owner ON records(patient_id,seq);
+          CREATE TABLE IF NOT EXISTS record_original_cursors (
+            record_id TEXT PRIMARY KEY, original_seq INTEGER NOT NULL
+          );''')
 
     def candidates(self, text):
         query = normalized(text)
@@ -153,7 +156,7 @@ class Records:
 
     def reviewed(self, text):
         name=clean_food_name(text)
-        canonical=FOOD_ALIASES.get(name)
+        canonical = 'Mandioca, cozida' if name == 'mandioca' else FOOD_ALIASES.get(name)
         if canonical:
             return next((f for f in self.foods if normalized(f['name'])==normalized(canonical)),None)
         words=set(name.split())
@@ -290,13 +293,7 @@ class Records:
         if len(message)>1800:raise ValueError('Muitos detalhes na imagem.')
         return message
 
-    def propose(self, patient_id, event_id, raw, auto_save=False):
-        items = raw if isinstance(raw, list) else [raw]
-        if not 1 <= len(items) <= 10:
-            raise ValueError('Envie até dez registros por vez.')
-        records = [validate_record(item) for item in items]
-        if sum(len(r['text']) for r in records) > 1800:
-            raise ValueError('Divida descrições longas em mais de uma mensagem.')
+    def enrich_meals(self, records, auto_save):
         for record in records:
             if record['kind'] == 'meal':
                 # Match canonical names or reviewed synonyms, never fuzzy guesses.
@@ -330,12 +327,24 @@ class Records:
                                            for key, column in NUTRIENTS.items()}
                 else:
                     if 'frango' in name.split() and record.get('estimateSource')!='photo':
-                        self.db.execute("UPDATE records SET status='superseded' WHERE patient_id=? AND status='pending'", (patient_id,))
-                        return (f"Você informou {record['quantity']:g} g de {record['text']}. "
+                        raise ValueError(f"Você informou {record['quantity']:g} g de {record['text']}. "
                                 'Para calcular os nutrientes certos, me conta: qual era o corte e como foi preparado? '
                                 'Por exemplo, peito sem pele grelhado, peito sem pele cozido ou filé à milanesa. '
                                 'Mantenho a quantidade que você informou; ainda não salvei esta refeição.')
                     record['nutritionStatus'] = 'unknown'
+
+    def propose(self, patient_id, event_id, raw, auto_save=False):
+        items = raw if isinstance(raw, list) else [raw]
+        if not 1 <= len(items) <= 10:
+            raise ValueError('Envie até dez registros por vez.')
+        records = [validate_record(item) for item in items]
+        if sum(len(r['text']) for r in records) > 1800:
+            raise ValueError('Divida descrições longas em mais de uma mensagem.')
+        try:
+            self.enrich_meals(records, auto_save)
+        except ValueError as error:
+            self.db.execute("UPDATE records SET status='superseded' WHERE patient_id=? AND status='pending'", (patient_id,))
+            return str(error)
         if auto_save:
             message = self.automatic_reply(records)
             self.db.execute("UPDATE records SET status='superseded' WHERE patient_id=? AND status='pending'", (patient_id,))
@@ -381,7 +390,79 @@ class Records:
                         ('confirmed' if accept else 'rejected', time.time(), patient_id))
         return 'Registro salvo no aplicativo. Ele aparecerá quando o app se conectar à internet.' if accept else 'Registro descartado. Pode me enviar a informação corrigida.'
 
-    def list(self, patient_id, after=0):
-        rows = self.db.execute("SELECT * FROM records WHERE patient_id=? AND status='confirmed' AND seq>? ORDER BY seq LIMIT 201", (patient_id, after)).fetchall()
+    def correct_meal(self, patient_id, text):
+        normalized_message = normalized(text)
+        half = re.fullmatch(r'(?:na verdade )?(?:eu )?comi (?:so |apenas )?(?:a )?metade(?: (?:do|da) (.+))?', normalized_message)
+        swap = re.fullmatch(r'(?:na verdade[, ]+)?(?:era|foi) (.{1,100}),?\s+(?:e )?n[aã]o (?:era |foi )?(.{1,100})',
+                            text.strip().rstrip('.!'), re.I)
+        explicit = re.match(r'^(?:corrig[ae]|corrigir|corrige|correcao)\b', normalized_message)
+        if not (half or swap or explicit):
+            return None
+        if explicit and not (half or swap):
+            return 'Pode dizer “comi só metade” ou “era mandioca, não batata”? Vou usar a última refeição registrada.'
+
+        # Edits retain the original creation time and event, even after resync.
+        rows = self.db.execute("""
+            SELECT * FROM records WHERE patient_id=? AND status='confirmed'
+            AND json_extract(payload,'$.kind')='meal' AND created>=?
+            ORDER BY created DESC, seq DESC
+        """, (patient_id, time.time()-24*3600)).fetchall()
+        if not rows:
+            return 'Não encontrei uma refeição recente no seu diário do WhatsApp para corrigir.'
+        event = rows[0]['event_id'].rsplit('#', 1)[0]
+        latest = [(row, json.loads(row['payload'])) for row in rows
+                  if row['event_id'].rsplit('#', 1)[0] == event]
+        target = normalized(swap[2]) if swap else half[1]
+        if target:
+            matches = [(row, record) for row, record in latest
+                       if any(f' {target} ' in f' {normalized(name)} '
+                              for name in (record['text'], record.get('foodName', '')))]
+            if len(matches) != 1:
+                return 'Não consegui identificar um único alimento na última refeição. Qual nome aparece no recibo?'
+            latest = matches
+
+        updates = []
+        for row, record in latest:
+            if swap:
+                replacement = swap[1].rstrip(', ').strip()
+                record = validate_record(dict(kind='meal', text=replacement, quantity=record['quantity'],
+                                              unit='g', mealType=record.get('mealType'), occurredAt=record['occurredAt'],
+                                              estimateSource='photo' if record.get('estimateSource') == 'photo' else None))
+                try:
+                    self.enrich_meals([record], auto_save=True)
+                except ValueError as error:
+                    return str(error)
+                if not record.get('foodCode'):
+                    return 'Ainda não encontrei uma referência para esse alimento. Pode me dizer como ele foi preparado?'
+            else:
+                record['quantity'] = round(record['quantity'] / 2, 6)
+                if record['quantity'] <= 0:
+                    return 'Essa porção ficou pequena demais para atualizar. Informe o peso em gramas.'
+                if 'portionCount' in record:
+                    record['portionCount'] /= 2
+                if 'nutrition' in record:
+                    record['nutrition'] = {key: round(value / 2, 4) if value is not None else None
+                                           for key, value in record['nutrition'].items()}
+            updates.append((row, record))
+
+        for row, record in updates:
+            self.db.execute('INSERT OR IGNORE INTO record_original_cursors VALUES (?,?)', (row['id'], row['seq']))
+            self.db.execute('DELETE FROM records WHERE id=?', (row['id'],))
+            self.db.execute("""
+                INSERT INTO records(id, patient_id, event_id, payload, status, created, confirmed)
+                VALUES (?,?,?,?,'confirmed',?,?)
+            """, (row['id'], patient_id, row['event_id'], json.dumps(record), row['created'], row['confirmed']))
+        summary = self.automatic_reply([record for _, record in updates])
+        return 'Corrigi sua última refeição no diário.\n\n' + summary if len(summary) < 1730 else 'Corrigi sua última refeição no diário.'
+
+    def list(self, patient_id, after=0, revisions=False, legacy_after=0):
+        cursor = 'r.seq' if revisions else 'COALESCE(c.original_seq,r.seq)'
+        rows = self.db.execute(f"""
+            SELECT r.id,r.payload,{cursor} AS seq FROM records r
+            LEFT JOIN record_original_cursors c ON c.record_id=r.id
+            WHERE r.patient_id=? AND r.status='confirmed' AND {cursor}>?
+            AND (r.seq>? OR c.record_id IS NOT NULL)
+            ORDER BY seq LIMIT 201
+        """, (patient_id, after, legacy_after if revisions else 0)).fetchall()
         return {'records': [{'id': r['id'], 'seq': r['seq'], **json.loads(r['payload'])} for r in rows[:200]],
                 'nextCursor': rows[min(len(rows), 200) - 1]['seq'] if rows else after, 'hasMore': len(rows) > 200}

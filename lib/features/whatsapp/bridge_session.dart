@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:opennutritracker/core/utils/hive_db_provider.dart';
 import 'package:opennutritracker/core/utils/locator.dart';
+import 'package:opennutritracker/core/data/dbo/intake_dbo.dart';
 import 'package:opennutritracker/core/data/repository/intake_repository.dart';
 import 'package:opennutritracker/core/data/repository/water_intake_repository.dart';
 import 'package:opennutritracker/core/data/repository/weight_log_repository.dart';
@@ -253,7 +254,9 @@ class BridgeSession {
         }
       }
       if (state['verified'] == true) {
-        var cursor = (state['cursor'] as num?)?.toInt() ?? 0;
+        // Legacy clients could skip revisions while advancing their cursor.
+        final legacyAfter = (state['cursor'] as num?)?.toInt() ?? 0;
+        var cursor = (state['revisionCursor'] as num?)?.toInt() ?? 0;
         var cache = List<Map<String, dynamic>>.from(
           (state['records'] as List?)?.map(
                 (e) => Map<String, dynamic>.from(e as Map),
@@ -263,7 +266,7 @@ class BridgeSession {
         for (var page = 0; page < 20 && sameProfile; page++) {
           final data = await client.request(
             'GET',
-            '/api/v1/records?after=$cursor',
+            '/api/v1/records?after=$cursor&revisions=1&legacyAfter=$legacyAfter',
             token: state['token'] as String,
           );
           for (final raw in data['records'] as List) {
@@ -274,7 +277,7 @@ class BridgeSession {
             cache.add(record);
           }
           cursor = (data['nextCursor'] as num).toInt();
-          state['cursor'] = cursor;
+          state['revisionCursor'] = cursor;
           state['records'] = cache.length > 200
               ? cache.sublist(cache.length - 200)
               : cache;
@@ -394,16 +397,18 @@ class BridgeSession {
         'snack' => IntakeTypeEntity.snack,
         _ => inferred,
       };
-      await locator<IntakeRepository>().addIntake(
-        IntakeEntity(
-          id: id,
-          unit: 'g',
-          amount: amount,
-          type: type,
-          meal: food,
-          dateTime: date,
+      await locator<IntakeRepository>().upsertAllIntakeDBOs([
+        IntakeDBO.fromIntakeEntity(
+          IntakeEntity(
+            id: id,
+            unit: 'g',
+            amount: amount,
+            type: type,
+            meal: food,
+            dateTime: date,
+          ),
         ),
-      );
+      ]);
     }
   }
 

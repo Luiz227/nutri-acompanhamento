@@ -53,3 +53,31 @@ class ProgressTests(unittest.TestCase):
         self.save('progress-final-lunch', 'Almocei arroz, minha última refeição do dia', {
             'kind': 'meal', 'text': 'Arroz, tipo 1, cozido', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'})
         self.assertEqual(self.store.db.execute('SELECT count(*) FROM dispatch_documents').fetchone()[0], 1)
+
+
+    def test_corrections_keep_ids_and_reach_only_revision_aware_sync(self):
+        self.verify()
+        self.store.allow_ai = True
+        patient = self.patient['id']
+        meal = {'kind': 'meal', 'text': 'batata frita', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'}
+        self.save('initial-potato', 'Almocei batata frita', meal)
+        before = self.store.records.list(patient)['records'][0]
+        command = self.event('Comi só metade', 'correction-half')
+        self.assertIn('Corrigi', self.store.ingest(command, 'nutri')['text'])
+        self.store.ingest(command, 'nutri')
+        after = self.store.records.list(patient, before['seq'], revisions=True)['records'][0]
+        self.assertEqual(after['id'], before['id'])
+        self.assertEqual(after['quantity'], 50)
+        self.assertAlmostEqual(after['nutrition']['energyKcal'], before['nutrition']['energyKcal'] / 2, places=3)
+        self.assertEqual(self.store.records.list(patient, before['seq'])['records'], [])
+        migrated = self.store.records.list(patient, revisions=True, legacy_after=after['seq'] + 10)['records']
+        self.assertEqual([record['id'] for record in migrated], [before['id']])
+        swap = self.store.ingest(self.event('Era mandioca, não batata', 'correction-swap'), 'nutri')
+        self.assertIn('Corrigi', swap['text'])
+        records = self.store.records.list(patient, revisions=True)['records']
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['id'], before['id'])
+        self.assertIn('mandioca', records[0]['foodName'].lower())
+        self.assertEqual(records[0]['quantity'], 50)
+        self.assertTrue(records[0]['estimated'])
+        self.assertEqual(records[0]['mealType'], 'lunch')

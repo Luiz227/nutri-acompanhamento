@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:opennutritracker/core/utils/hive_db_provider.dart';
 import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/data/repository/water_intake_repository.dart';
+import 'package:opennutritracker/core/data/dbo/intake_dbo.dart';
 import 'package:opennutritracker/core/data/repository/intake_repository.dart';
 import 'package:opennutritracker/core/domain/entity/intake_entity.dart';
 import 'package:opennutritracker/core/domain/entity/intake_type_entity.dart';
@@ -24,7 +25,18 @@ class _Profiles implements HiveDBProvider {
 class _Intakes implements IntakeRepository {
   final entries = <IntakeEntity>[];
   @override
-  Future<void> addIntake(IntakeEntity entry) async => entries.add(entry);
+  Future<void> upsertAllIntakeDBOs(List<IntakeDBO> values) async {
+    for (final value in values) {
+      final entry = IntakeEntity.fromIntakeDBO(value);
+      final index = entries.indexWhere((existing) => existing.id == entry.id);
+      if (index == -1) {
+        entries.add(entry);
+      } else {
+        entries[index] = entry;
+      }
+    }
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
@@ -122,7 +134,7 @@ void main() {
         value: jsonEncode({
           'token': 'test-token',
           'url': 'https://nutri.example',
-          'cursor': 0,
+          'cursor': 10,
           'records': [],
         }),
       );
@@ -199,8 +211,32 @@ void main() {
                           },
                         },
                       ]
+                    : request.url.queryParameters['after'] == '3'
+                    ? [
+                        {
+                          'id': 'photo-beef-3',
+                          'seq': 4,
+                          'kind': 'meal',
+                          'text': 'Bife bovino grelhado',
+                          'foodCode': 'taco-estimate:beef-grilled',
+                          'estimated': true,
+                          'estimateSource': 'photo',
+                          'quantity': 100,
+                          'unit': 'g',
+                          'mealType': 'lunch',
+                          'occurredAt': '2026-11-10T12:00:00Z',
+                          'nutrientsPer100g': {
+                            'energy_kcal_100': 236,
+                            'proteins_100': 34,
+                            'carbohydrates_100': 0,
+                            'fat_100': 10,
+                          },
+                        },
+                      ]
                     : [],
-                'nextCursor': 3,
+                'nextCursor': request.url.queryParameters['after'] == '0'
+                    ? 3
+                    : 4,
                 'hasMore': false,
               }),
               200,
@@ -220,6 +256,8 @@ void main() {
       expect(intakes.entries.last.totalProteinsGram, closeTo(68, .01));
       await session.synchronize();
       expect(intakes.entries, hasLength(3));
+      expect(intakes.entries.last.totalKcal, closeTo(236, .01));
+      expect(intakes.entries.last.totalProteinsGram, closeTo(34, .01));
     },
   );
 
