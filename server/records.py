@@ -11,6 +11,7 @@ from nutrition_sources import ProductSource
 from food_composition import additional_food
 from pof import UNIT_LABELS, pof_food
 from portions import portion
+from menu_foods import menu_options, resolve_menu
 from photo_meals import clean_food_name
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -164,6 +165,12 @@ class Records:
           CREATE TABLE IF NOT EXISTS record_original_cursors (
             record_id TEXT PRIMARY KEY, original_seq INTEGER NOT NULL
           );''')
+
+    def menu_options(self):
+        return menu_options(self.foods)
+
+    def enrich_menu(self, records, auto_save=False):
+        resolve_menu(records, self.foods)
 
     def candidates(self, text):
         query = normalized(text)

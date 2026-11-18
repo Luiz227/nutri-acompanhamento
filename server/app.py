@@ -276,6 +276,7 @@ class Store:
                 'verified': bool(p['verified']), 'consentActive': bool(p['consent']),
                 'optOutPersisted': optout, 'text': text, 'message': text,
                 'documentRequested': action == 'assistant' and text == MENU_REQUEST_TEXT and eligible(menu_profile, context.get('appProfile',{}),text),
+                'menuFoodOptions': self.records.menu_options() if action == 'assistant' and text == MENU_REQUEST_TEXT else [],
                 'context': context,
                 'history': [dict(r) for r in reversed(history)] if p['verified'] else [],
                 'catalogueCandidates': self.records.candidates(' '.join(
@@ -298,6 +299,7 @@ class Store:
             if event['id'].startswith('reminder:') and not self.coaching.reminder(event['id'], p['id']):
                 return {'approved': False}
             document = None
+            document_error = None
             saved_meal = False
             attempted_record = False
             closing_message = event['text']
@@ -317,10 +319,17 @@ class Store:
                     job = self._job(p, event['id'], event['action'], event['text'], False)
                     if self.allow_ai and job.get('documentRequested'):
                         try:
-                            document = make_pdf(body.get('plan'), job['context'].get('displayName'), job['context'].get('appProfile',{}), self.menu.get(p['id']), resolve=self.records.enrich_meals)
+                            document = make_pdf(body.get('plan'), job['context'].get('displayName'), job['context'].get('appProfile',{}), self.menu.get(p['id']), resolve=self.records.enrich_menu)
                             text = 'Pronto! Separei algumas ideias de refeições com base no que você me contou. Seu guia vai logo abaixo.'
-                        except (ValueError, TypeError, OverflowError):
-                            text = 'Não consegui montar um guia que respeitasse o que você me contou. Pode me pedir outra versão?'
+                        except (ValueError, TypeError, OverflowError) as error:
+                            print('PDF_VALIDATION_FAILED:', str(error)[:240], flush=True)
+                            document_error = str(error)[:240]
+                            preferences = self.menu.get(p['id'])
+                            if preferences:
+                                self.menu.save(p['id'], preferences['stage'],
+                                               {**{key: value for key, value in preferences.items() if key != 'stage'},
+                                                'pdfRetryPending': True})
+                            text = 'Não consegui concluir o cálculo das porções desse cardápio. Posso tentar outra combinação de alimentos para o PDF?'
                     proposed = sandwich_records(event['text']) or body.get('record') if self.allow_ai else None
                     if not job.get('documentRequested') and proposed is not None and not self.db.execute('SELECT id FROM photo_events WHERE id=?',(event['id'],)).fetchone():
                         try:
@@ -364,6 +373,7 @@ class Store:
             expires = datetime.fromtimestamp(time.time() + 30, timezone.utc).isoformat()
             return {'approved': True, 'dispatchId': dispatch_id, 'eventId': event['id'],
                     'userId': p['id'], 'phone': p['phone'], 'instance': instance, 'text': text, 'expiresAt': expires,
+                    **({'documentError': document_error} if document_error else {}),
                     'parts': self.messaging.prepare(dispatch_id, text, document)}
 
     def result(self, body):
@@ -447,7 +457,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 17, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 18, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}

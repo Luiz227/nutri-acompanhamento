@@ -17,6 +17,7 @@ COPY server/portions.py /app/
 COPY server/meal_pdf.py /app/
 COPY server/food_composition.py /app/
 COPY server/pof.py /app/
+COPY server/menu_foods.py /app/
 COPY --from=pof /build/food_pof.json /app/
 COPY assets/data/food_composition_extra.json /app/
 COPY assets/data/FOOD-COMPOSITION-NOTICE.txt /app/legal/

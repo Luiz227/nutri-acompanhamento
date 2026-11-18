@@ -14,11 +14,52 @@ class PdfTests(unittest.TestCase):
     verify=fixtures.BridgeTests.verify
     event=fixtures.BridgeTests.event
 
+    def test_menu_catalogue_rejects_ambiguous_recipes_and_wrong_substitutes(self):
+        for name in ('ovos mexidos', 'omelete', 'salada de folhas',
+                     'salada de alface e tomate', 'sopa de legumes', 'queijo branco'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                self.store.records.enrich_menu([{'kind': 'meal', 'text': name, 'quantity': 100}])
+        options = self.store.records.menu_options()
+        self.assertGreater(len(options), 25)
+        for option in options:
+            record = {'kind': 'meal', 'text': option['name'], 'quantity': 100}
+            self.store.records.enrich_menu([record])
+            self.assertEqual(record['foodName'], option['name'])
+            self.assertTrue(all(record['nutrition'][key] is not None
+                                for key in ('energyKcal', 'proteinG', 'carbsG', 'fatG')))
+
+    def test_verified_options_make_quantified_pdf_and_failure_has_diagnostic(self):
+        self.ready()
+        profile = self.store.me(self.enrollment['token'])['context']['appProfile']
+        self.store.context(self.enrollment['token'], {'profile': {
+            **profile, 'dailyGoals': {'energyKcal': 2200}}})
+        job = self.store.ingest(self.event('Quero PDF', 'verified-menu-request'), 'nutri')
+        self.assertTrue(job['menuFoodOptions'])
+        bad = copy.deepcopy(PLAN)
+        for meal in bad['meals']:
+            meal['foods'] = [{'name': 'sopa de legumes', 'grams': 200}]
+        dispatch = self.store.reserve({'eventId': job['eventId'], 'userId': job['userId'],
+                                      'phone': job['phone'], 'plan': bad}, 'nutri')
+        self.assertIn('catálogo', dispatch['documentError'])
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM dispatch_documents').fetchone()[0], 0)
+        good = copy.deepcopy(PLAN)
+        names = ['Pão, trigo, forma, integral', 'Banana, prata, crua', 'Arroz, tipo 1, cozido',
+                 'Iogurte, natural', 'Frango, peito, sem pele, grelhado']
+        for meal, name in zip(good['meals'], names):
+            meal['foods'] = [{'name': name, 'grams': 200}]
+        job = self.store.ingest(self.event('pode', 'verified-menu-second-request'), 'nutri')
+        self.assertTrue(job['documentRequested'])
+        dispatch = self.store.reserve({'eventId': job['eventId'], 'userId': job['userId'],
+                                      'phone': job['phone'], 'plan': good}, 'nutri')
+        self.assertNotIn('documentError', dispatch)
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM dispatch_documents').fetchone()[0], 1)
+        self.assertEqual(self.store.records.list(self.patient['id'])['records'], [])
+
     def test_quantified_menu_uses_catalogue_and_never_records_consumption(self):
         self.ready()
         plan = copy.deepcopy(PLAN)
         foods = [
-            [('Pão, francês', 70), ('Ovo, de galinha, inteiro, cozido/10minutos', 100)],
+            [('Pão, trigo, francês', 70), ('Ovo, de galinha, inteiro, cozido/10minutos', 100)],
             [('Banana, prata, crua', 100)],
             [('Arroz, tipo 1, cozido', 200), ('Feijão, carioca, cozido', 150), ('Frango, peito, sem pele, grelhado', 150)],
             [('Banana, prata, crua', 100), ('Aveia, flocos, crua', 50)],
@@ -27,16 +68,16 @@ class PdfTests(unittest.TestCase):
         for meal, ingredients in zip(plan['meals'], foods):
             meal['foods'] = [{'name': name, 'grams': grams} for name, grams in ingredients]
         app = {'goal': 'maintainWeight', 'dailyGoals': {'energyKcal': 2200}}
-        result = calculate_portions(validate_plan(plan), app, self.store.records.enrich_meals)
+        result = calculate_portions(validate_plan(plan), app, self.store.records.enrich_menu)
         self.assertLess(abs(result['totals']['energyKcal'] - 2200), 22)
         self.assertAlmostEqual(result['totals']['proteinG'],
                                sum(m['totals']['proteinG'] for m in result['meals']))
-        pdf = make_pdf(plan, 'Exemplo', app, {}, demo=True, resolve=self.store.records.enrich_meals)
+        pdf = make_pdf(plan, 'Exemplo', app, {}, demo=True, resolve=self.store.records.enrich_menu)
         self.assertEqual(len(re.findall(rb'/Type\s*/Page\b', pdf)), 3)
         self.assertEqual(self.store.records.list(self.patient['id'])['records'], [])
         plan['meals'][0]['foods'][0]['name'] = 'Alimento inexistente xyz123'
         with self.assertRaises(ValueError):
-            calculate_portions(validate_plan(plan), app, self.store.records.enrich_meals)
+            calculate_portions(validate_plan(plan), app, self.store.records.enrich_menu)
 
     def ready(self):
         self.verify()

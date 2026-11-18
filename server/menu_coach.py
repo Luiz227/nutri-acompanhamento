@@ -38,7 +38,7 @@ class MenuCoach:
         data = {k:v for k,v in profile.items() if k != 'stage'}
         app = read_profile(self.db, patient_id)
         data['appProfile'] = app
-        yes = command in ('sim', 'quero', 'sim quero', 'pode sim', 'pode mandar', 'quero sim')
+        yes = command in ('sim', 'quero', 'sim quero', 'pode', 'pode sim', 'pode mandar', 'quero sim')
         if request:
             data['latestRequest'] = text[:800]
         elif stage == 'ready' and re.match(r'^(?:prefiro|nao como|nao gosto de|evito)\b', command):
@@ -50,7 +50,8 @@ class MenuCoach:
                        'nao quero pdf', 'cancelar pdf', 'nao quero mais pdf', 'cancelar guia'):
             self.save(patient_id, 'declined', data)
             return 'Tudo bem, seguimos com seu diário.'
-        if stage == 'ready' and request:
+        if stage == 'ready' and (request or data.get('pdfRetryPending') and yes):
+            data.pop('pdfRetryPending', None)
             known_age = age_of(app)
             if known_age is not None and known_age < 18:
                 self.save(patient_id, 'clinical', {'reason': 'menor de idade', 'appProfile': app})

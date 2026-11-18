@@ -24,6 +24,7 @@
 
 !server/food_composition.py
 !server/pof.py
+!server/menu_foods.py
 !tool/
 !tool/import_ibge_pof.py
 !assets/data/food_composition_extra.json
