@@ -20,7 +20,7 @@ from coaching import Coaching
 from messaging import Messaging
 from menu_coach import MenuCoach, MENU_READY
 from patient_profile import validate_profile, profile_context
-from daily_progress import progress_card
+from daily_progress import achieved_goals, progress_card
 from meal_pdf import eligible, make_pdf, MENU_REQUEST_TEXT
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
@@ -62,6 +62,9 @@ class Store:
           CREATE TABLE IF NOT EXISTS history (
             id INTEGER PRIMARY KEY, patient_id TEXT NOT NULL REFERENCES patients(id),
             role TEXT NOT NULL, content TEXT NOT NULL, created REAL NOT NULL);
+          CREATE TABLE IF NOT EXISTS daily_goal_notices (
+            patient_id TEXT NOT NULL REFERENCES patients(id), day TEXT NOT NULL, metric TEXT NOT NULL,
+            PRIMARY KEY(patient_id,day,metric));
           CREATE TABLE IF NOT EXISTS notifications (
             id TEXT PRIMARY KEY, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
             attempts INTEGER NOT NULL DEFAULT 0, next_at REAL NOT NULL DEFAULT 0);
@@ -296,6 +299,7 @@ class Store:
                 return {'approved': False}
             document = None
             saved_meal = False
+            attempted_record = False
             closing_message = event['text']
             if event['optout']:
                 if p['consent']:
@@ -314,12 +318,13 @@ class Store:
                     if self.allow_ai and job.get('documentRequested'):
                         try:
                             document = make_pdf(body.get('plan'), job['context'].get('displayName'), job['context'].get('appProfile',{}), self.menu.get(p['id']))
-                            text = 'Preparei seu guia com sugestões para a sua rotina. Vou enviar o PDF logo abaixo. As ideias são flexíveis e não alteram suas metas no aplicativo.'
+                            text = 'Pronto! Separei algumas ideias de refeições com base no que você me contou. Seu guia vai logo abaixo.'
                         except (ValueError, TypeError, OverflowError):
-                            text = 'Não consegui organizar o PDF desta vez. Pode me pedir para gerar o guia novamente?'
+                            text = 'Não consegui montar um guia que respeitasse o que você me contou. Pode me pedir outra versão?'
                     elif self.allow_ai and body.get('record') is not None and not self.db.execute('SELECT id FROM photo_events WHERE id=?',(event['id'],)).fetchone():
                         try:
                             text = self.records.propose(p['id'], event['id'], body['record'], auto_save=True)
+                            attempted_record = True
                             items = body['record'] if isinstance(body['record'], list) else [body['record']]
                             saved_meal = any(isinstance(r, dict) and r.get('kind') == 'meal' for r in items)
                             if saved_meal and len(text) < 1640:
@@ -333,14 +338,21 @@ class Store:
                     if photo and json.loads(photo['payload']).get('records'):
                         photo_data = json.loads(photo['payload'])
                         text = self.records.propose(p['id'], event['id'], photo_data['records'], auto_save=True)
-                        saved_meal = True
+                        saved_meal = attempted_record = True
                         closing_message = photo_data.get('userText', '')
                     else:text = event['text']
                 else:
-                    text = 'Olá! Sou a assistente virtual de acompanhamento nutricional do aplicativo. Para confirmar a conexão, envie o código exibido no aplicativo. Se não foi você quem solicitou, envie SAIR.'
-            if saved_meal:
+                    text = 'Oi! Aqui é a GarfoFala, seu diário alimentar pelo WhatsApp. Para confirmar a conexão, envie o código exibido no aplicativo. Se não foi você quem solicitou, envie SAIR.'
+            if attempted_record:
                 profile = json.loads(p['context']).get('appProfile', {})
-                document = progress_card(self.db, p['id'], event['id'], closing_message, profile)
+                congratulations = achieved_goals(self.db, p['id'], event['id'], profile)
+                if congratulations:
+                    available = 1780 - len(congratulations)
+                    if len(text) > available:
+                        text = text[:available].rsplit(' ', 1)[0].rstrip('.,; ') + '…'
+                    text += '\n\n' + congratulations
+                if saved_meal:
+                    document = progress_card(self.db, p['id'], event['id'], closing_message, profile)
             dispatch_id = 'dispatch:' + str(uuid.uuid4())
             self.db.execute('INSERT INTO dispatches(id,event_id,patient_id,status,created) VALUES(?,?,?,?,?)',
                 (dispatch_id, event['id'], p['id'], 'reserved', time.time()))
@@ -392,6 +404,7 @@ class Store:
 
     def cleanup(self):
         with self.lock, self.db:
+            self.db.execute("DELETE FROM daily_goal_notices WHERE day < date('now','-30 days')")
             self.db.execute('DELETE FROM history WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM inbox WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM photo_drafts WHERE created<?', (time.time()-30*86400,))
@@ -433,7 +446,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 12, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 13, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}

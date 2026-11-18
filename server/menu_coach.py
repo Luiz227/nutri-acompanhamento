@@ -39,6 +39,12 @@ class MenuCoach:
         app = read_profile(self.db, patient_id)
         data['appProfile'] = app
         yes = command in ('sim', 'quero', 'sim quero', 'pode sim', 'pode mandar', 'quero sim')
+        if request:
+            data['latestRequest'] = text[:800]
+        elif stage == 'ready' and re.match(r'^(?:prefiro|nao como|nao gosto de|evito)\b', command):
+            data['preferenceUpdate'] = text[:600]
+            self.save(patient_id, 'ready', data)
+            return 'Entendi. Vou levar isso em conta nas próximas sugestões.'
         no = command in ('nao', 'nao quero', 'agora nao', 'depois')
         if command in ('nao quero mais sugestoes', 'parar sugestoes', 'cancelar sugestoes', 'deixa para depois',
                        'nao quero pdf', 'cancelar pdf', 'nao quero mais pdf', 'cancelar guia'):

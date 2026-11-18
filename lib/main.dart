@@ -387,7 +387,7 @@ class _OpenNutriTrackerAppState extends State<OpenNutriTrackerApp>
     AppPalette darkPalette,
   ) {
     return MaterialApp(
-      onGenerateTitle: (context) => S.of(context).appTitle,
+      title: 'GarfoFala',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(lightPalette),
       darkTheme: buildAppTheme(darkPalette),

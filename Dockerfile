@@ -11,6 +11,7 @@ COPY server/nutrition_sources.py server/menu_coach.py server/patient_profile.py 
 COPY server/portions.py /app/
 COPY server/meal_pdf.py /app/
 COPY server/photo_meals.py server/daily_progress.py /app/
+COPY assets/icon/garfofala-symbol.png /app/garfofala-symbol.png
 COPY assets/data/taco_4ed.json /app/taco_4ed.json
 COPY LICENSE NOTICE.md /app/legal/
 COPY assets/data/TACO-NOTICE.txt /app/legal/TACO-NOTICE.txt

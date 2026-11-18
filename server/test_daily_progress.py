@@ -81,3 +81,26 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(records[0]['quantity'], 50)
         self.assertTrue(records[0]['estimated'])
         self.assertEqual(records[0]['mealType'], 'lunch')
+
+    def test_goals_are_announced_once_and_pending_water_reminder_is_suppressed(self):
+        from datetime import datetime
+        from daily_progress import BRASILIA
+        self.verify()
+        self.store.allow_ai = True
+        patient = self.patient['id']
+        self.store.context(self.enrollment['token'], {'profile': {'dailyGoals': {'waterMl': 1000, 'proteinG': 2}}})
+        self.store.db.execute("UPDATE coaching SET reminders=1,stage='done' WHERE patient_id=?", (patient,))
+        due = datetime.now(BRASILIA).replace(hour=9, minute=1, second=0, microsecond=0)
+        self.store.coaching.schedule(due)
+        reminder = self.store.db.execute('SELECT event_id FROM reminder_slots').fetchone()[0]
+        self.assertIsNotNone(self.store.coaching.reminder(reminder, patient, due.timestamp()))
+        water = {'kind': 'water', 'text': 'Água', 'quantity': 500, 'unit': 'ml'}
+        self.assertNotIn('bateu', self.save('goal-water-1', 'Bebi água', water)['text'])
+        self.assertIn('meta diária de água', self.save('goal-water-2', 'Bebi água', water)['text'])
+        self.assertNotIn('bateu', self.save('goal-water-3', 'Bebi água', water)['text'])
+        self.assertIsNone(self.store.coaching.reminder(reminder, patient, due.timestamp()))
+        self.store.coaching.schedule(due.replace(hour=12))
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM reminder_slots').fetchone()[0], 1)
+        meal = {'kind': 'meal', 'text': 'Arroz, tipo 1, cozido', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'}
+        self.assertIn('meta diária de proteína', self.save('goal-protein-1', 'Almocei arroz', meal)['text'])
+        self.assertNotIn('bateu', self.save('goal-protein-2', 'Mais arroz', meal)['text'])

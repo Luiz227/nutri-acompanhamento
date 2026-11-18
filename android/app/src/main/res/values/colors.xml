@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#ffffff</color>
+    <color name="ic_launcher_background">#DFEF7B</color>
     <!-- Matches AppPalette.light.canvas so the OS launch screen blends into the
          Flutter splash (see lib/core/presentation/splash_screen.dart). -->
     <color name="splash_background">#F7F4EF</color>

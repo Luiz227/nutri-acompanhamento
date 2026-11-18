@@ -13,6 +13,8 @@
 !server/daily_progress.py
 !server/requirements.txt
 !assets/
+!assets/icon/
+!assets/icon/garfofala-symbol.png
 !assets/data/
 !assets/data/taco_4ed.json
 !assets/data/TACO-NOTICE.txt

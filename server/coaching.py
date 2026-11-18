@@ -92,6 +92,7 @@ class Coaching:
         return 'Posso enviar lembretes para beber água às ' + ', '.join(hours or DEFAULT_HOURS) + '? Os horários seguem Brasília. Pode responder sim ou não.'
 
     def schedule(self, now=None):
+        from daily_progress import water_goal_reached
         now = now or datetime.now(timezone.utc)
         local = now.astimezone(BRASILIA)
         rows = self.db.execute('SELECT c.*,p.phone,p.consent_version FROM coaching c JOIN patients p ON p.id=c.patient_id WHERE c.reminders=1 AND c.stage=\'done\' AND p.consent=1 AND p.verified=1').fetchall()
@@ -102,6 +103,8 @@ class Coaching:
                 # No replay of hours missed during downtime.
                 if not 0 <= (local - due).total_seconds() < 300:
                     continue
+                if water_goal_reached(self.db, p['patient_id'], local.date()):
+                    break
                 slot = due.isoformat()
                 event_id = f"reminder:{p['patient_id']}:{due.strftime('%Y%m%dT%H%M')}"
                 added = self.db.execute('INSERT OR IGNORE INTO reminder_slots(event_id,patient_id,slot,created) VALUES(?,?,?,?)', (event_id, p['patient_id'], slot, now.timestamp())).rowcount
@@ -110,10 +113,14 @@ class Coaching:
                     self.db.execute('INSERT INTO notifications(id,body) VALUES(?,?)', (event_id, json.dumps(body)))
 
     def reminder(self, event_id, patient_id, now=None):
+        from daily_progress import water_goal_reached
         now = time.time() if now is None else now
         p = self.get(patient_id)
         row = self.db.execute('SELECT * FROM reminder_slots WHERE event_id=? AND patient_id=?', (event_id, patient_id)).fetchone()
         if not row or not p or not p['reminders'] or now - row['created'] > 600:
+            return None
+        local = datetime.fromtimestamp(now, BRASILIA)
+        if datetime.fromisoformat(row['slot']).date() != local.date() or water_goal_reached(self.db, patient_id, local.date()):
             return None
         name = f", {p['name']}" if p['name'] else ''
         return f'Oi{name}! Uma pausa para lembrar da água. 💧 Se beber, pode me contar a quantidade que eu anoto.'

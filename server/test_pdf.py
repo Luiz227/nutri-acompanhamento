@@ -39,6 +39,14 @@ class PdfTests(unittest.TestCase):
         self.assertFalse(self.store.reserve(body,'nutri')['approved'])
         self.assertFalse(self.store.messaging.authorize(dispatch['parts'][1],'nutri')['approved'])
 
+    def test_current_request_reaches_pdf_and_conflicting_plan_is_not_sent(self):
+        import json
+        self.ready()
+        job=self.store.ingest(self.event('Quero um PDF sem banana','pdf-with-preference'),'nutri')
+        self.assertIn('sem banana',json.loads(job['context']['menuPreferences'])['latestRequest'])
+        self.store.reserve({'eventId':job['eventId'],'userId':job['userId'],'phone':job['phone'],'plan':PLAN},'nutri')
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM dispatch_documents').fetchone()[0],0)
+
     def test_optout_blocks_pdf_even_after_text_was_sent(self):
         self.ready()
         job=self.store.ingest(self.event('Quero um PDF','pdf-optout-request'),'nutri')

@@ -1,5 +1,6 @@
 """Private, bounded meal-suggestion PDFs. No model-supplied nutrient totals."""
 from io import BytesIO
+from pathlib import Path
 from xml.sax.saxutils import escape
 from datetime import datetime, timezone, timedelta
 from patient_profile import GOALS, age_of
@@ -61,7 +62,17 @@ def make_pdf(plan, name, app, preferences, demo=False):
     if preferences:
         import re
         health=plain(str(preferences.get('restrictionsAndHealth','')))
-        foods=plain(' '.join(m['suggestion']+' '+m['alternative'] for m in plan['meals'])+' '+' '.join(plan['shopping']))
+        stated=plain(' '.join(str(preferences.get(key,'')) for key in
+                              ('foodPreferences','routineAndPreferences','latestRequest','preferenceUpdate')))
+        foods_to_avoid = re.findall(
+            r'\b(?:nao (?:como|gosto de|quero)|evito|sem)\s+(?:de\s+)?([a-z]+(?:-[a-z]+)?)', stated
+        )
+        foods=plain(' '.join(m['suggestion']+' '+m['alternative'] for m in plan['meals'])+' '+' '.join(plan['shopping']+plan['tips']))
+        for food in foods_to_avoid:
+            if food not in {'arroz','feijao','frango','banana','queijo','peixe','ovo','ovos','carne','leite','trigo','amendoim','iogurte','pao','tomate','aveia','camarao','porco'}:
+                continue
+            if re.search(r'\b'+re.escape(food.rstrip('s'))+r's?\b',foods):
+                raise ValueError('O guia inclui um alimento que a pessoa pediu para evitar.')
         for trigger, ingredients in [
             (r'leite|lactose', r'leite|queijo|iogurte|requeijao|manteiga'),
             (r'amendoim',r'amendoim'), (r'ovo',r'ovo|ovos|omelete|maionese'),
@@ -71,12 +82,12 @@ def make_pdf(plan, name, app, preferences, demo=False):
                 raise ValueError('As sugestões precisam respeitar a restrição informada.')
     from reportlab.pdfgen import canvas as pdfcanvas
     green, accent, gold, ink, muted, cream, pale = [colors.HexColor(v) for v in
-        ('#173E35','#327760','#D7AD63','#24413B','#687D76','#F8F7F3','#EDF3ED')]
+        ('#103B2C','#236447','#DCEE71','#24413B','#687D76','#F8F7F3','#EDF3ED')]
     w,h=A4
     out=BytesIO()
     c=pdfcanvas.Canvas(out,pagesize=A4)
-    c.setTitle('Seu plano alimentar | Nutri Acompanhamento')
-    c.setAuthor('Nutri Acompanhamento')
+    c.setTitle('Seu plano alimentar | GarfoFala')
+    c.setAuthor('GarfoFala')
     name=str(name or 'Você').strip()[:55]
     date=datetime.now(timezone(timedelta(hours=-3))).strftime('%d/%m/%Y')
     def paragraph(value,x,top,width,size=10,leading=14,color=ink,bold=False):
@@ -87,6 +98,9 @@ def make_pdf(plan, name, app, preferences, demo=False):
         return height
     def box(x,top,width,height,fill=colors.white):
         c.setFillColor(fill);c.roundRect(x,h-top-height,width,height,13,stroke=0,fill=1)
+    logo = Path(__file__).resolve().parent.parent / 'assets/icon/garfofala-symbol.png'
+    if not logo.exists():
+        logo = Path(__file__).with_name('garfofala-symbol.png')
     def header(kicker,title,subtitle):
         c.setFillColor(cream);c.rect(0,0,w,h,stroke=0,fill=1)
         c.saveState()
@@ -95,12 +109,14 @@ def make_pdf(plan, name, app, preferences, demo=False):
         c.setFillColor(gold);c.circle(w-38,h-52,84,stroke=0,fill=1)
         c.setFillColor(accent);c.circle(w-13,h-146,88,stroke=0,fill=1)
         c.restoreState()
+        if logo.exists():
+            c.drawImage(str(logo),w-109,h-114,width=64,height=64,mask='auto')
         paragraph(kicker,43,39,420,9,12,colors.HexColor('#CBDFD2'),True)
         paragraph(title,43,68,440,27,33,colors.white,True)
         paragraph(subtitle,43,112,420,10,14,colors.HexColor('#D8E8DE'))
     def footer(number):
         c.setStrokeColor(colors.HexColor('#DEE5DE'));c.line(42,52,w-42,52)
-        paragraph('NUTRI ACOMPANHAMENTO  /  SUGESTÕES PERSONALIZADAS',42,h-43,450,7,10,muted)
+        paragraph('GARFOFALA  /  SUGESTÕES PERSONALIZADAS',42,h-43,450,7,10,muted)
         c.setFillColor(accent);c.setFont('Helvetica-Bold',8);c.drawRightString(w-42,34,f'{number:02d} / 02')
     header('BEM-ESTAR  /  NUTRIÇÃO','Seu plano alimentar','Equilíbrio, variedade e escolhas possíveis no dia a dia.')
     box(42,187,w-84,42)

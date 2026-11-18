@@ -19,23 +19,31 @@ FINAL_MEAL = re.compile(r'\b(?:ultima refeicao(?: do dia)?|nao vou comer mais ho
 
 def progress_card(db, patient_id, event_id, message, profile, now=None):
     today = (now or datetime.now(BRASILIA)).astimezone(BRASILIA).date()
-    rows = db.execute(
-        "SELECT event_id,payload FROM records WHERE patient_id=? AND status='confirmed'",
-        (patient_id,),
+    rows = diary_rows(db, patient_id, today)
+    closes_day = any(
+        row_event.startswith(event_id + '#') and record['kind'] == 'meal'
+        and (record.get('mealType') == 'dinner' or FINAL_MEAL.search(plain(message)))
+        for row_event, record in rows
     )
-    records = []
-    closes_day = False
-    for row in rows:
-        record = json.loads(row['payload'])
-        when = datetime.fromisoformat(record['occurredAt']).astimezone(BRASILIA)
-        if when.date() != today:
-            continue
-        records.append(record)
-        if row['event_id'].startswith(event_id + '#') and record['kind'] == 'meal':
-            closes_day |= record.get('mealType') == 'dinner' or bool(FINAL_MEAL.search(plain(message)))
     if not closes_day:
         return None
+    totals, missing, estimated = summarize(record for _, record in rows)
+    return render_card(today, totals, profile.get('dailyGoals', {}), missing, estimated)
 
+
+def diary_rows(db, patient_id, day):
+    from datetime import time, timedelta, timezone
+    start = datetime.combine(day, time.min, BRASILIA)
+    end = start + timedelta(days=1)
+    rows = db.execute(
+        "SELECT event_id,payload FROM records WHERE patient_id=? AND status='confirmed' "
+        "AND json_extract(payload,'$.occurredAt')>=? AND json_extract(payload,'$.occurredAt')<?",
+        (patient_id, start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()),
+    )
+    return [(row['event_id'], json.loads(row['payload'])) for row in rows]
+
+
+def summarize(records):
     totals = dict.fromkeys((key for key, _, _ in METRICS), 0.0)
     missing = set()
     estimated = False
@@ -52,7 +60,48 @@ def progress_card(db, patient_id, event_id, message, profile, now=None):
                 missing.add(key)
             else:
                 totals[key] += value
-    return render_card(today, totals, profile.get('dailyGoals', {}), missing, estimated)
+    return totals, missing, estimated
+
+
+def achieved_goals(db, patient_id, event_id, profile, day=None):
+    day = day or datetime.now(BRASILIA).date()
+    goals = profile.get('dailyGoals', {})
+    if not goals:
+        return ''
+    rows = diary_rows(db, patient_id, day)
+    if not any(key.startswith(event_id + '#') for key, _ in rows):
+        return ''
+    before, _, _ = summarize(record for key, record in rows if not key.startswith(event_id + '#'))
+    after, _, _ = summarize(record for _, record in rows)
+    labels = {'waterMl': 'de água', 'proteinG': 'de proteína', 'carbsG': 'de carboidratos',
+              'fatG': 'de gorduras', 'energyKcal': 'de energia'}
+    hit = []
+    for key, label in labels.items():
+        goal = goals.get(key)
+        if not goal or not before[key] < goal <= after[key]:
+            continue
+        inserted = db.execute(
+            'INSERT OR IGNORE INTO daily_goal_notices(patient_id, day, metric) VALUES(?,?,?)',
+            (patient_id, day.isoformat(), key),
+        ).rowcount
+        if inserted:
+            hit.append(label)
+    if not hit:
+        return ''
+    if hit == ['de água']:
+        return 'Boa! Você bateu sua meta diária de água. 💧'
+    if len(hit) == 1:
+        return f'Boa! Você bateu sua meta diária {hit[0]}.'
+    return 'Boa! Você bateu suas metas de hoje ' + ', '.join(hit[:-1]) + ' e ' + hit[-1] + '.'
+
+
+def water_goal_reached(db, patient_id, day):
+    from patient_profile import read_profile
+    goal = read_profile(db, patient_id).get('dailyGoals', {}).get('waterMl')
+    if not goal:
+        return False
+    return sum(record['quantity'] for _, record in diary_rows(db, patient_id, day)
+               if record['kind'] == 'water') >= goal
 
 
 def render_card(day, totals, goals, missing, estimated):
@@ -69,7 +118,14 @@ def render_card(day, totals, goals, missing, estimated):
     draw = ImageDraw.Draw(image)
     green, ink, muted = '#16453A', '#173C33', '#49635A'
     draw.rectangle((0, 0, 720, 220), fill=green)
-    draw.text((48, 42), 'NUTRI ACOMPANHAMENTO', font=font(20, True), fill='#D0E8DC')
+    logo = Path(__file__).resolve().parent.parent / 'assets/icon/garfofala-symbol.png'
+    if not logo.exists():
+        logo = Path(__file__).with_name('garfofala-symbol.png')
+    if logo.exists():
+        with Image.open(logo) as source:
+            icon = source.convert('RGBA').resize((54, 54), Image.Resampling.LANCZOS)
+            image.paste(icon, (619, 27), icon)
+    draw.text((48, 42), 'GARFOFALA', font=font(20, True), fill='#D5EF77')
     draw.text((46, 91), 'Seu progresso de hoje', font=font(43, True), fill='white')
     draw.text((48, 160), day.strftime('%d/%m/%Y') + '  •  Diário alimentar', font=font(23), fill='#D0E8DC')
 
@@ -87,7 +143,7 @@ def render_card(day, totals, goals, missing, estimated):
             draw.rounded_rectangle((63, y + 50, 653, y + 60), radius=5, fill='#E2EBE6')
             length = round(590 * min(value / goal, 1))
             if length:
-                draw.rounded_rectangle((63, y + 50, 63 + length, y + 60), radius=5, fill='#348567')
+                draw.rounded_rectangle((63, y + 50, 63 + length, y + 60), radius=5, fill='#5C8A41')
             draw.text((63, y + 70), f'Meta do app: {number(goal)} {unit}', font=font(16), fill=muted)
         else:
             draw.text((63, y + 58), 'Meta não definida no app', font=font(16), fill=muted)

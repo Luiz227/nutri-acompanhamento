@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:opennutritracker/core/presentation/widgets/dynamic_ont_logo.dart';
-import 'package:opennutritracker/generated/l10n.dart';
 
 class HomeAppbar extends StatelessWidget implements PreferredSizeWidget {
   const HomeAppbar({super.key});
@@ -10,11 +8,12 @@ class HomeAppbar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       title: Row(
         children: [
-          const SizedBox(width: 40, child: DynamicOntLogo()),
+          Image.asset('assets/icon/garfofala-symbol.png', width: 36, height: 36),
+          const SizedBox(width: 6),
           Expanded(
             child: RichText(
               text: TextSpan(
-                text: S.of(context).appTitle,
+                text: 'GarfoFala',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
