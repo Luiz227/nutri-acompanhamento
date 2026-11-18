@@ -23,7 +23,11 @@ def validate_analysis(raw):
         if isinstance(grams,bool) or not isinstance(grams,(int,float)) or not math.isfinite(grams) or not 0 < grams <= 2000:
             raise ValueError('Porção inválida.')
         if confidence not in ('high','medium','low'): raise ValueError('Confiança inválida.')
-        result.append({'food':name.strip(),'grams':round(grams,1),'confidence':confidence})
+        validated = {'food':name.strip(),'grams':round(grams,1),'confidence':confidence}
+        query = item.get('catalogueQuery')
+        if isinstance(query, str) and 1 <= len(query.strip()) <= 180:
+            validated['catalogueQuery'] = query.strip()
+        result.append(validated)
     return {'usable':True,'items':result}
 
 
@@ -46,7 +50,8 @@ def prepare(analyses, user_text, now=None):
     # Low-confidence components remain explicitly unresolved, not fabricated.
     records=[({'kind':'observation','text':item['food'],'estimateSource':'photo','visualConfidence':'low'} if item['confidence']=='low' else {'kind':'meal','text':item['food'],'quantity':item['grams'],'unit':'g',
               'mealType':category,'mealTypeSource':'time' if inferred else 'explicit',
-              'estimateSource':'photo','visualConfidence':item['confidence']}) for item in items]
+              'estimateSource':'photo','visualConfidence':item['confidence'],
+              'catalogueQuery':item.get('catalogueQuery')}) for item in items]
     if re.search(r'\b(?:comi|consumi|so|apenas)\s+(?:a\s+)?metade\b',text):
         for record in records:
             if record['kind']=='meal':record['quantity']=round(record['quantity']/2,1)

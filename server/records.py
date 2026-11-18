@@ -8,6 +8,7 @@ import uuid
 import difflib
 import random
 from nutrition_sources import ProductSource
+from food_composition import additional_food
 from portions import portion
 from photo_meals import clean_food_name
 from datetime import datetime, timezone, timedelta
@@ -89,6 +90,9 @@ def validate_record(raw):
     if not isinstance(text, str) or not 1 <= len(text.strip()) <= 600:
         raise ValueError('Descrição obrigatória (até 600 caracteres).')
     result = {'kind': raw['kind'], 'text': text.strip()}
+    query = raw.get('catalogueQuery')
+    if raw['kind'] == 'meal' and isinstance(query, str) and 1 <= len(query.strip()) <= 180:
+        result['catalogueQuery'] = query.strip()
     if raw.get('barcode') is not None:
         if not isinstance(raw['barcode'], str) or not re.fullmatch(r'\d{8,14}', raw['barcode']):
             raise ValueError('Código de barras inválido.')
@@ -345,25 +349,26 @@ class Records:
                     words = sorted(name.split())
                     matches = [f for f in self.foods if sorted(normalized(f['name']).split()) == words]
                 food = matches[0] if len(matches) == 1 else None
-                if not food and auto_save:
-                    food=self.reviewed(record['text'])
-                    if food:record['estimated']=True
                 if auto_save and record.get('barcode'):
                     food = self.products.product(record['barcode'])
-                if not food and auto_save:
-                    food = self.closest(record['text'])
+                elif not food and auto_save:
+                    food = (self.reviewed(record['text'])
+                            or additional_food(record['text'], record.get('catalogueQuery'))
+                            or self.closest(record['text']))
                     if food:
                         record['estimated'] = True
                 if food:
 
                     record.update(foodCode=food.get('code') or f"taco:{food['id']}", foodName=food['name'],
                                   nutrientsPer100g=food['nutrients'], source=food.get('source', 'TACO/NEPA/UNICAMP (2011)'))
+                    if food.get('url'):
+                        record['referenceUrl'] = food['url']
                     if food.get('referenceIds'):record['referenceIds']=food['referenceIds']
                     record['nutrition'] = {key: round(food['nutrients'][column] * record['quantity'] / 100, 4)
                                            if isinstance(food['nutrients'].get(column), (int, float)) else None
                                            for key, column in NUTRIENTS.items()}
                 else:
-                    if 'frango' in name.split() and record.get('estimateSource')!='photo':
+                    if 'frango' in name.split() and not record.get('barcode') and record.get('estimateSource')!='photo':
                         raise ValueError(f"Você informou {record['quantity']:g} g de {record['text']}. "
                                 'Para calcular os nutrientes certos, me conta: qual era o corte e como foi preparado? '
                                 'Por exemplo, peito sem pele grelhado, peito sem pele cozido ou filé à milanesa. '

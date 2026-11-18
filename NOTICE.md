@@ -50,3 +50,5 @@ Versão 0.8: registro direto de observações visuais estruturadas; associaçõe
 A versão 0.9 adapta a apresentação do PDF à referência visual fornecida pelo usuário, com conteúdo dinâmico e identificação Nutri Acompanhamento. Inclui abertura pelo nome/objetivo e preferências persistidas; preserva a licença e os créditos do projeto original.
 
 A distribuição GarfoFala 0.12 acrescenta a identidade visual da GarfoFala, avisos de metas, pausa de lembretes após a meta de água e melhorias no guia de alimentação e na análise de fotos. Os créditos e a licença do projeto de origem continuam aplicáveis.
+
+GarfoFala 0.14 adiciona bases de composição complementares do USDA FoodData Central e CoFID. Os créditos e as licenças das bases estão em assets/data/FOOD-COMPOSITION-NOTICE.txt.

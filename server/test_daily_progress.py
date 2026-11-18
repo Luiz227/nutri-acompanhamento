@@ -138,3 +138,39 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(sum(r.get('removed',False) for r in updates),1)
         self.assertEqual(len(updates),2)
         self.assertIn('já está',self.store.ingest(self.event('Pode corrigir essa','photo-feijoada-ack'),'nutri')['text'])
+
+    def test_additional_catalogs_match_without_using_model_nutrient_values(self):
+        from food_composition import additional_food
+        foods = {
+            'mirtilo': 'Foundation Foods',
+            'quinoa cozida': 'SR Legacy',
+            'edamame cozido': 'FNDDS',
+            'queijo cottage simples': 'CoFID',
+        }
+        for label, dataset in foods.items():
+            food = additional_food(label)
+            self.assertIn(dataset, food['source'])
+            self.assertTrue(food['url'].startswith('https://'))
+            self.assertGreater(food['nutrients']['energy_kcal_100'], 0)
+        self.assertIsNone(additional_food('quinoa crua', 'Quinoa, cooked'))
+        self.assertIsNone(additional_food('bebida zero', 'Couscous, cooked'))
+        self.verify()
+        self.store.allow_ai = True
+        meal = {'kind':'meal','text':'quinoa cozida','unit':'g','quantity':150,
+                'mealType':'lunch','nutrition':{'energyKcal':999}}
+        self.save('additional-food-quinoa','Almocei quinoa',meal)
+        row = self.store.records.list(self.patient['id'])['records'][0]
+        self.assertEqual(row['foodCode'],'fdc:168917')
+        self.assertEqual(row['nutrition']['energyKcal'],180)
+        self.assertTrue(row['estimated'])
+        self.assertIn('food-details/168917',row['referenceUrl'])
+
+    def test_unavailable_barcode_does_not_use_generic_food_as_product(self):
+        self.verify()
+        self.store.allow_ai = True
+        self.store.records.products.fetch = lambda _: {'status':0}
+        meal = {'kind':'meal','text':'quinoa cozida','unit':'g','quantity':150,
+                'mealType':'lunch','barcode':'12345678'}
+        self.save('missing-barcode-no-fallback','Produto de quinoa',meal)
+        row = self.store.records.list(self.patient['id'])['records'][0]
+        self.assertNotIn('nutrition',row)

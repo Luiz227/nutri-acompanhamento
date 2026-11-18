@@ -1,0 +1,22 @@
+GarfoFala supplementary food composition data
+
+USDA FoodData Central (US Department of Agriculture, Agricultural Research Service):
+Foundation Foods October 2026, SR Legacy April 2018 and Survey Foods (FNDDS 2021-2023).
+https://fdc.nal.usda.gov/download-datasets/
+CC0 1.0: https://fdc.nal.usda.gov/api-guide/#licensing
+
+McCance and Widdowson's Composition of Foods Integrated Dataset (CoFID), Public Health England, 2021.
+Contains public sector information licensed under the Open Government Licence v3.0.
+https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid
+https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+
+Compact selection per 100 g. Sources remain independently identified. CoFID
+available carbohydrate and measured AOAC fiber are summed as an approximation
+of total carbohydrate, where both are available. Trace is represented as zero
+during import and missing measurements are kept as null. CoFID alcoholic
+beverages (per 100 ml) and rows without all four core values are omitted.
+This generated selection is not a new edition of the original datasets.
+
+Brazilian generic foods still use TACO (see TACO-NOTICE.txt). Packaged food
+lookup uses Open Food Facts by barcode (ODbL), kept in its own cache and credited
+on each record. See https://world.openfoodfacts.org/terms-of-use.

@@ -10,6 +10,9 @@ COPY server/messaging.py /app/messaging.py
 COPY server/nutrition_sources.py server/menu_coach.py server/patient_profile.py /app/
 COPY server/portions.py /app/
 COPY server/meal_pdf.py /app/
+COPY server/food_composition.py /app/
+COPY assets/data/food_composition_extra.json /app/
+COPY assets/data/FOOD-COMPOSITION-NOTICE.txt /app/legal/
 COPY server/photo_meals.py server/daily_progress.py /app/
 COPY assets/icon/garfofala-symbol.png /app/garfofala-symbol.png
 COPY assets/data/taco_4ed.json /app/taco_4ed.json

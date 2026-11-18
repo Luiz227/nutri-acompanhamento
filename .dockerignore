@@ -21,3 +21,7 @@
 !LICENSE
 !NOTICE.md
 !Dockerfile
+
+!server/food_composition.py
+!assets/data/food_composition_extra.json
+!assets/data/FOOD-COMPOSITION-NOTICE.txt
