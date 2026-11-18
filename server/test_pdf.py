@@ -14,6 +14,33 @@ class PdfTests(unittest.TestCase):
     verify=fixtures.BridgeTests.verify
     event=fixtures.BridgeTests.event
 
+    def test_six_ingredient_lunch_and_fifteen_shopping_items_generate_pdf(self):
+        plan = copy.deepcopy(PLAN)
+        ingredients = [
+            [('Pão, trigo, forma, integral',60),('Queijo, minas, frescal',40),('Mamão, Papaia, cru',120)],
+            [('Iogurte, natural',170),('Maçã, Argentina, com casca, crua',130)],
+            [('Arroz, integral, cozido',140),('Feijão, carioca, cozido',120),
+             ('Frango, peito, sem pele, grelhado',140),('Alface, crespa, crua',50),
+             ('Tomate, com semente, cru',80),('Brócolis, cozido',80)],
+            [('Banana, nanica, crua',90),('Amendoim, torrado, salgado',20)],
+            [('Omelete, de queijo',120),('Abobrinha, italiana, refogada',100),('Arroz, integral, cozido',90)],
+        ]
+        for meal, foods in zip(plan['meals'], ingredients):
+            meal['foods'] = [{'name': name, 'grams': grams} for name, grams in foods]
+        plan['shopping'] = ['Pão integral','Queijo minas frescal','Mamão','Iogurte natural','Maçã',
+                            'Arroz integral','Feijão carioca','Peito de frango','Alface','Tomate',
+                            'Brócolis','Banana','Amendoim torrado','Ovos e queijo para omelete','Abobrinha']
+        app = {'goal': 'loseWeight', 'dailyGoals': {'energyKcal': 2200}}
+        pdf = make_pdf(plan, 'Demonstração', app, {}, demo=True, resolve=self.store.records.enrich_menu)
+        self.assertTrue(pdf.startswith(b'%PDF'))
+        result = calculate_portions(validate_plan(plan), app, self.store.records.enrich_menu)
+        self.assertLess(abs(result['totals']['energyKcal'] - 2200), 22)
+        # Longer shopping lists gain pages rather than clipping or rejecting the menu.
+        plan['shopping'] = [f'Ingrediente {index}: ' + 'alimentos da estação para a rotina em casa' for index in range(30)]
+        expanded = make_pdf(plan, 'Demonstração', app, {}, demo=True, resolve=self.store.records.enrich_menu)
+        self.assertGreater(len(re.findall(rb'/Type\s*/Page\b', expanded)),
+                           len(re.findall(rb'/Type\s*/Page\b', pdf)))
+
     def test_menu_catalogue_rejects_ambiguous_recipes_and_wrong_substitutes(self):
         for name in ('ovos mexidos', 'omelete', 'salada de folhas',
                      'salada de alface e tomate', 'sopa de legumes', 'queijo branco'):

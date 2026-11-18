@@ -46,7 +46,7 @@ def validate_plan(raw):
                                 'alternative': text(meal.get('alternative'), 180)})
         if 'foods' in meal:
             foods = meal['foods']
-            if not isinstance(foods, list) or not 1 <= len(foods) <= 5:
+            if not isinstance(foods, list) or not 1 <= len(foods) <= 8:
                 raise ValueError('Informe os alimentos de cada refeição.')
             result['meals'][-1]['foods'] = []
             for food in foods:
@@ -61,7 +61,7 @@ def validate_plan(raw):
                 result['meals'][-1]['foods'].append(item)
     if len({m['mealType'] for m in result['meals']}) != len(meals) or not {'breakfast','lunch','snack','dinner'}.issubset({m['mealType'] for m in result['meals']}):
         raise ValueError('Não repita refeições.')
-    for key, maximum, size in [('shopping', 10, 65), ('tips', 3, 160)]:
+    for key, maximum, size in [('shopping', 30, 65), ('tips', 3, 160)]:
         values = raw.get(key)
         if not isinstance(values, list) or not 1 <= len(values) <= maximum:
             raise ValueError('Lista de sugestões inválida.')
@@ -148,6 +148,40 @@ def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
     green, accent, gold, ink, muted, cream, pale = [colors.HexColor(v) for v in
         ('#103B2C','#236447','#DCEE71','#24413B','#687D76','#F8F7F3','#EDF3ED')]
     w,h=A4
+    shopping_pages = []
+    shopping_text = 'Para as compras: ' + ', '.join(plan['shopping']) + '.'
+    tips_text = ' '.join(plan['tips'])
+    shopping_top = 328 + 55 * len(plan['meals'])
+    small_style = ParagraphStyle('shopping-fit', fontName='Helvetica', fontSize=7.2, leading=9.2)
+    needed = sum(Paragraph(escape(value), small_style).wrap(w-86, 1000)[1]
+                 for value in (shopping_text, tips_text))
+    if shopping_top + 31 + needed > 737:
+        entries, top = [], 215
+        for item in plan['shopping']:
+            item_height = Paragraph(escape(item), ParagraphStyle(
+                'shopping-item', fontName='Helvetica', fontSize=10, leading=14)).wrap(w-112, 1000)[1] + 14
+            if top + item_height > 730:
+                shopping_pages.append(entries)
+                entries, top = [], 215
+            entries.append((item, item_height))
+            top += item_height
+        if entries:
+            shopping_pages.append(entries)
+    detail_pages = []
+    if calculated:
+        cards = []
+        top = 246
+        for meal in sorted(calculated['meals'], key=lambda m: list(LABELS).index(m['mealType'])):
+            foods = ' • '.join(f"{record['quantity']:.0f} g de {record['text']}" for record in meal['records'])
+            style = ParagraphStyle('detail-fit', fontName='Helvetica', fontSize=9, leading=12)
+            height = Paragraph(escape(foods), style).wrap(w-110, 1000)[1] + 60
+            if top + height > 723:
+                detail_pages.append(cards)
+                cards, top = [], 246
+            cards.append((meal, foods, height))
+            top += height + 9
+        if cards:
+            detail_pages.append(cards)
     out=BytesIO()
     c=pdfcanvas.Canvas(out,pagesize=A4)
     c.setTitle('Seu plano alimentar | GarfoFala')
@@ -181,7 +215,7 @@ def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
     def footer(number):
         c.setStrokeColor(colors.HexColor('#DEE5DE'));c.line(42,52,w-42,52)
         paragraph('GARFOFALA  /  SUGESTÕES PERSONALIZADAS',42,h-43,450,7,10,muted)
-        c.setFillColor(accent);c.setFont('Helvetica-Bold',8);c.drawRightString(w-42,34,f'{number:02d} / {3 if calculated else 2:02d}')
+        c.setFillColor(accent);c.setFont('Helvetica-Bold',8);c.drawRightString(w-42,34,f'{number:02d} / {2 + len(detail_pages) + len(shopping_pages):02d}')
     header('BEM-ESTAR  /  NUTRIÇÃO','Seu plano alimentar','Equilíbrio, variedade e escolhas possíveis no dia a dia.')
     box(42,187,w-84,42)
     paragraph('NOME: '+name,57,201,350,9,12)
@@ -206,6 +240,8 @@ def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
             suggestion='Se fizer sentido para sua fome: '+meal['suggestion']
         else:
             suggestion=meal['suggestion']
+        if calculated and len(suggestion) > 220:
+            suggestion='Refeição com ' + str(len(meal.get('foods', []))) + ' alimentos. Veja os pesos e valores de cada refeição nas páginas de porções e nutrientes.'
         alternative='Alternativa: '+meal['alternative']
         text_width=w-165
         size=9.2
@@ -241,7 +277,7 @@ def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
     top+=85
     paragraph('PARA FACILITAR SUAS ESCOLHAS',43,top,480,11,14,green,True)
     # The shopping list is generated for this person, never generic allergen swaps.
-    shopping='Para as compras: '+', '.join(plan['shopping'])+'.'
+    shopping='Sua lista completa de compras está nas páginas seguintes.' if shopping_pages else shopping_text
     tips=' '.join(plan['tips'])
     size=8.8
     while size>=7.2:
@@ -256,26 +292,31 @@ def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
     note=('EXEMPLO COM DADOS FICTÍCIOS. ' if demo else '')+'Sugestões educativas, não uma prescrição clínica. Respeite suas alergias e restrições; necessidades específicas pedem acompanhamento nutricional.'
     paragraph(note,53,754,w-106,7.3,9.5,muted)
     footer(2);c.showPage()
-    if calculated:
+    for page_number, cards in enumerate(detail_pages, 3):
         header('SEU CARDÁPIO DO DIA','Porções e nutrientes','Quantidades sugeridas para a meta já definida no aplicativo.')
         totals = calculated['totals']
         paragraph(f"Meta do aplicativo: {calculated['target']:.0f} kcal | Cardápio: {totals['energyKcal']:.0f} kcal",43,190,500,11,15,green,True)
         paragraph(f"Proteínas: {totals['proteinG']:.1f} g   Carboidratos: {totals['carbsG']:.1f} g   Gorduras: {totals['fatG']:.1f} g",43,213,500,10,14)
         top = 246
-        for meal in sorted(calculated['meals'], key=lambda m: list(LABELS).index(m['mealType'])):
-            box(42,top,w-84,91)
+        for meal, foods, height in cards:
+            box(42,top,w-84,height)
             paragraph(LABELS[meal['mealType']].upper(),55,top+9,w-110,10,13,green,True)
-            foods = ' • '.join(f"{record['quantity']:.0f} g de {record['text']}" for record in meal['records'])
-            height = paragraph(foods,55,top+27,w-110,8.5,11)
-            if height > 33:
-                raise ValueError('Descrição de alimentos longa demais para o PDF.')
+            paragraph(foods,55,top+27,w-110,9,12)
             values = meal['totals']
             paragraph(f"{values['energyKcal']:.0f} kcal | Proteínas {values['proteinG']:.1f} g | Carboidratos {values['carbsG']:.1f} g | Gorduras {values['fatG']:.1f} g",
-                      55,top+70,w-110,8,10,muted)
-            top += 98
+                      55,top+height-18,w-110,8,10,muted)
+            top += height + 9
         paragraph('Pesos da parte comestível, no preparo descrito. Valores estimados pelas tabelas nutricionais. As alternativas das páginas anteriores precisam de novo cálculo antes de substituir estas porções.',
                   43,top+3,w-86,8,11,muted)
-        footer(3);c.showPage()
+        footer(page_number);c.showPage()
+    for page_number, entries in enumerate(shopping_pages, 3 + len(detail_pages)):
+        header('PARA SUA ROTINA','Lista de compras','Ingredientes das sugestões escolhidas para você.')
+        top = 215
+        for item, height in entries:
+            box(42,top,w-84,height-4)
+            paragraph(item,56,top+5,w-112,10,14)
+            top += height
+        footer(page_number);c.showPage()
     c.save()
     data=out.getvalue()
     if len(data)>500000:raise ValueError('Documento muito grande.')
