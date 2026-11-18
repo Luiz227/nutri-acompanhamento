@@ -5,6 +5,7 @@ from xml.sax.saxutils import escape
 from datetime import datetime, timezone, timedelta
 from patient_profile import GOALS, age_of
 from coaching import plain
+import math
 
 MENU_REQUEST_TEXT = 'Quero sugestões gerais e flexíveis de refeições em um PDF personalizado, usando o objetivo, as restrições e as preferências que informei.'
 
@@ -43,6 +44,21 @@ def validate_plan(raw):
             raise ValueError('Refeição inválida.')
         result['meals'].append({'mealType': meal['mealType'], 'suggestion': text(meal.get('suggestion'), 240),
                                 'alternative': text(meal.get('alternative'), 180)})
+        if 'foods' in meal:
+            foods = meal['foods']
+            if not isinstance(foods, list) or not 1 <= len(foods) <= 5:
+                raise ValueError('Informe os alimentos de cada refeição.')
+            result['meals'][-1]['foods'] = []
+            for food in foods:
+                if not isinstance(food, dict):
+                    raise ValueError('Alimento inválido.')
+                grams = food.get('grams')
+                if isinstance(grams, bool) or not isinstance(grams, (int, float)) or not math.isfinite(grams) or not 1 <= grams <= 1000:
+                    raise ValueError('Porção inválida.')
+                item = {'name': text(food.get('name'), 100), 'grams': grams}
+                if food.get('catalogueQuery'):
+                    item['catalogueQuery'] = text(food['catalogueQuery'], 180)
+                result['meals'][-1]['foods'].append(item)
     if len({m['mealType'] for m in result['meals']}) != len(meals) or not {'breakfast','lunch','snack','dinner'}.issubset({m['mealType'] for m in result['meals']}):
         raise ValueError('Não repita refeições.')
     for key, maximum, size in [('shopping', 10, 65), ('tips', 3, 160)]:
@@ -53,7 +69,49 @@ def validate_plan(raw):
     return result
 
 
-def make_pdf(plan, name, app, preferences, demo=False):
+def calculate_portions(plan, app, resolve):
+    """Fit a suggested menu to the existing app energy goal using catalogue data."""
+    target = app.get('dailyGoals', {}).get('energyKcal')
+    if target is None:
+        return None
+    if isinstance(target, bool) or not isinstance(target, (int, float)) or not math.isfinite(target) or not 0 < target < 12000:
+        raise ValueError('Meta calórica inválida.')
+    if not resolve or any(not meal.get('foods') for meal in plan['meals']):
+        raise ValueError('O cardápio precisa de alimentos e porções calculáveis.')
+    meals = []
+    for meal in plan['meals']:
+        records = [{'kind': 'meal', 'text': food['name'], 'quantity': food['grams'],
+                    'catalogueQuery': food.get('catalogueQuery')} for food in meal['foods']]
+        resolve(records, auto_save=True)
+        if any(not record.get('nutrition') or any(record['nutrition'].get(key) is None
+               for key in ('energyKcal', 'proteinG', 'carbsG', 'fatG')) for record in records):
+            raise ValueError('Faltam referências nutricionais para o cardápio.')
+        meals.append({'mealType': meal['mealType'], 'records': records})
+    base_energy = sum(record['nutrition']['energyKcal'] for meal in meals for record in meal['records'])
+    if base_energy <= 0:
+        raise ValueError('Cardápio sem energia calculável.')
+    factor = target / base_energy
+    if not .5 <= factor <= 2:
+        raise ValueError('Reorganize o cardápio para aproximá-lo da meta do aplicativo.')
+    totals = dict.fromkeys(('energyKcal', 'proteinG', 'carbsG', 'fatG'), 0)
+    for meal in meals:
+        meal['totals'] = dict.fromkeys(totals, 0)
+        for record in meal['records']:
+            record['quantity'] = round(record['quantity'] * factor)
+            if not 1 <= record['quantity'] <= 1000:
+                raise ValueError('Revise as porções do cardápio.')
+            for key, column in (('energyKcal', 'energy_kcal_100'), ('proteinG', 'proteins_100'),
+                                ('carbsG', 'carbohydrates_100'), ('fatG', 'fat_100')):
+                value = record['nutrientsPer100g'][column] * record['quantity'] / 100
+                record['nutrition'][key] = value
+                meal['totals'][key] += value
+                totals[key] += value
+    if abs(totals['energyKcal'] - target) > max(10, target * .01):
+        raise ValueError('O arredondamento das porções se afastou da meta.')
+    return {'meals': meals, 'totals': totals, 'target': target}
+
+
+def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import Paragraph
@@ -67,7 +125,7 @@ def make_pdf(plan, name, app, preferences, demo=False):
         foods_to_avoid = re.findall(
             r'\b(?:nao (?:como|gosto de|quero)|evito|sem)\s+(?:de\s+)?([a-z]+(?:-[a-z]+)?)', stated
         )
-        foods=plain(' '.join(m['suggestion']+' '+m['alternative'] for m in plan['meals'])+' '+' '.join(plan['shopping']+plan['tips']))
+        foods=plain(' '.join(m['suggestion']+' '+m['alternative']+' '+' '.join(f['name'] for f in m.get('foods', [])) for m in plan['meals'])+' '+' '.join(plan['shopping']+plan['tips']))
         for food in foods_to_avoid:
             if food not in {'arroz','feijao','frango','banana','queijo','peixe','ovo','ovos','carne','leite','trigo','amendoim','iogurte','pao','tomate','aveia','camarao','porco'}:
                 continue
@@ -80,6 +138,12 @@ def make_pdf(plan, name, app, preferences, demo=False):
         ]:
             if re.search(trigger,health) and re.search(r'\b(?:'+ingredients+r')\b',foods):
                 raise ValueError('As sugestões precisam respeitar a restrição informada.')
+    calculated = calculate_portions(plan, app, resolve) if resolve else None
+    if calculated:
+        for meal in plan['meals']:
+            selected = next(value for value in calculated['meals'] if value['mealType'] == meal['mealType'])
+            meal['suggestion'] = ', '.join(
+                f"{record['quantity']:.0f} g de {record['text']}" for record in selected['records'])
     from reportlab.pdfgen import canvas as pdfcanvas
     green, accent, gold, ink, muted, cream, pale = [colors.HexColor(v) for v in
         ('#103B2C','#236447','#DCEE71','#24413B','#687D76','#F8F7F3','#EDF3ED')]
@@ -117,7 +181,7 @@ def make_pdf(plan, name, app, preferences, demo=False):
     def footer(number):
         c.setStrokeColor(colors.HexColor('#DEE5DE'));c.line(42,52,w-42,52)
         paragraph('GARFOFALA  /  SUGESTÕES PERSONALIZADAS',42,h-43,450,7,10,muted)
-        c.setFillColor(accent);c.setFont('Helvetica-Bold',8);c.drawRightString(w-42,34,f'{number:02d} / 02')
+        c.setFillColor(accent);c.setFont('Helvetica-Bold',8);c.drawRightString(w-42,34,f'{number:02d} / {3 if calculated else 2:02d}')
     header('BEM-ESTAR  /  NUTRIÇÃO','Seu plano alimentar','Equilíbrio, variedade e escolhas possíveis no dia a dia.')
     box(42,187,w-84,42)
     paragraph('NOME: '+name,57,201,350,9,12)
@@ -191,7 +255,28 @@ def make_pdf(plan, name, app, preferences, demo=False):
     box(42,746,w-84,37)
     note=('EXEMPLO COM DADOS FICTÍCIOS. ' if demo else '')+'Sugestões educativas, não uma prescrição clínica. Respeite suas alergias e restrições; necessidades específicas pedem acompanhamento nutricional.'
     paragraph(note,53,754,w-106,7.3,9.5,muted)
-    footer(2);c.showPage();c.save()
+    footer(2);c.showPage()
+    if calculated:
+        header('SEU CARDÁPIO DO DIA','Porções e nutrientes','Quantidades sugeridas para a meta já definida no aplicativo.')
+        totals = calculated['totals']
+        paragraph(f"Meta do aplicativo: {calculated['target']:.0f} kcal | Cardápio: {totals['energyKcal']:.0f} kcal",43,190,500,11,15,green,True)
+        paragraph(f"Proteínas: {totals['proteinG']:.1f} g   Carboidratos: {totals['carbsG']:.1f} g   Gorduras: {totals['fatG']:.1f} g",43,213,500,10,14)
+        top = 246
+        for meal in sorted(calculated['meals'], key=lambda m: list(LABELS).index(m['mealType'])):
+            box(42,top,w-84,91)
+            paragraph(LABELS[meal['mealType']].upper(),55,top+9,w-110,10,13,green,True)
+            foods = ' • '.join(f"{record['quantity']:.0f} g de {record['text']}" for record in meal['records'])
+            height = paragraph(foods,55,top+27,w-110,8.5,11)
+            if height > 33:
+                raise ValueError('Descrição de alimentos longa demais para o PDF.')
+            values = meal['totals']
+            paragraph(f"{values['energyKcal']:.0f} kcal | Proteínas {values['proteinG']:.1f} g | Carboidratos {values['carbsG']:.1f} g | Gorduras {values['fatG']:.1f} g",
+                      55,top+70,w-110,8,10,muted)
+            top += 98
+        paragraph('Pesos da parte comestível, no preparo descrito. Valores estimados pelas tabelas nutricionais. As alternativas das páginas anteriores precisam de novo cálculo antes de substituir estas porções.',
+                  43,top+3,w-86,8,11,muted)
+        footer(3);c.showPage()
+    c.save()
     data=out.getvalue()
     if len(data)>500000:raise ValueError('Documento muito grande.')
     return data

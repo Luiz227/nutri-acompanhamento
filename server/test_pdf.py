@@ -4,7 +4,7 @@ import re
 import unittest
 from unittest.mock import patch
 import test_app as fixtures
-from meal_pdf import make_pdf, validate_plan
+from meal_pdf import make_pdf, validate_plan, calculate_portions
 from example_menu import PLAN
 
 
@@ -13,6 +13,30 @@ class PdfTests(unittest.TestCase):
     tearDown=fixtures.BridgeTests.tearDown
     verify=fixtures.BridgeTests.verify
     event=fixtures.BridgeTests.event
+
+    def test_quantified_menu_uses_catalogue_and_never_records_consumption(self):
+        self.ready()
+        plan = copy.deepcopy(PLAN)
+        foods = [
+            [('Pão, francês', 70), ('Ovo, de galinha, inteiro, cozido/10minutos', 100)],
+            [('Banana, prata, crua', 100)],
+            [('Arroz, tipo 1, cozido', 200), ('Feijão, carioca, cozido', 150), ('Frango, peito, sem pele, grelhado', 150)],
+            [('Banana, prata, crua', 100), ('Aveia, flocos, crua', 50)],
+            [('Arroz, tipo 1, cozido', 200), ('Feijão, carioca, cozido', 150), ('Frango, peito, sem pele, grelhado', 150)],
+        ]
+        for meal, ingredients in zip(plan['meals'], foods):
+            meal['foods'] = [{'name': name, 'grams': grams} for name, grams in ingredients]
+        app = {'goal': 'maintainWeight', 'dailyGoals': {'energyKcal': 2200}}
+        result = calculate_portions(validate_plan(plan), app, self.store.records.enrich_meals)
+        self.assertLess(abs(result['totals']['energyKcal'] - 2200), 22)
+        self.assertAlmostEqual(result['totals']['proteinG'],
+                               sum(m['totals']['proteinG'] for m in result['meals']))
+        pdf = make_pdf(plan, 'Exemplo', app, {}, demo=True, resolve=self.store.records.enrich_meals)
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page\b', pdf)), 3)
+        self.assertEqual(self.store.records.list(self.patient['id'])['records'], [])
+        plan['meals'][0]['foods'][0]['name'] = 'Alimento inexistente xyz123'
+        with self.assertRaises(ValueError):
+            calculate_portions(validate_plan(plan), app, self.store.records.enrich_meals)
 
     def ready(self):
         self.verify()
