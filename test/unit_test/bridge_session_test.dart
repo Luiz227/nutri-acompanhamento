@@ -38,6 +38,10 @@ class _Intakes implements IntakeRepository {
   }
 
   @override
+  Future<void> deleteIntakeById(String id) async =>
+      entries.removeWhere((entry) => entry.id == id);
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
@@ -233,10 +237,16 @@ void main() {
                           },
                         },
                       ]
+                    : request.url.queryParameters['after'] == '4'
+                    ? [
+                        {'id': 'external-1', 'seq': 5, 'removed': true},
+                      ]
                     : [],
-                'nextCursor': request.url.queryParameters['after'] == '0'
-                    ? 3
-                    : 4,
+                'nextCursor': switch (request.url.queryParameters['after']) {
+                  '0' => 3,
+                  '3' => 4,
+                  _ => 5,
+                },
                 'hasMore': false,
               }),
               200,
@@ -258,6 +268,12 @@ void main() {
       expect(intakes.entries, hasLength(3));
       expect(intakes.entries.last.totalKcal, closeTo(236, .01));
       expect(intakes.entries.last.totalProteinsGram, closeTo(34, .01));
+      await session.synchronize();
+      expect(intakes.entries, hasLength(2));
+      expect(
+        intakes.entries.map((entry) => entry.id),
+        isNot(contains('whatsapp:external-1')),
+      );
     },
   );
 

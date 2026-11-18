@@ -1,6 +1,6 @@
 # Agente nutricional: aplicativo + n8n + Evolution API
 
-Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 13**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
+Importe **nutri-evolution.json**, gerado por build-workflow.mjs: 42 nós, desativado e sem segredos. Requer nutri-api **apiVersion 14**, Evolution **2.3.7** Baileys e uma credencial OpenAI nativa.
 
 As verificações locais simulam os serviços. A versão nova ainda precisa ser importada/testada na instância real do operador. Leia [como atualizar e testar](../../deploy/MIDIA-E-ABERTURA.md).
 

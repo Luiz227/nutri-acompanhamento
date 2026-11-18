@@ -31,8 +31,18 @@ def portion(text, unit, size='medium'):
     text = re.sub(r'[^a-z0-9]+', ' ', text).strip()
     text = text.replace('papaya', 'papaia')
     words = set(text.split())
-    # A cake/juice/puree containing an apple is not one whole apple.
-    if words & {'suco', 'bolo', 'torta', 'pure', 'vitamina', 'doce', 'geleia', 'salada', 'frito', 'frita', 'assada', 'assado', 'cozida', 'cozido'}:
+    if unit == 'slice' and size == 'medium':
+        references = {
+            'presunto': 'https://tbca.net.br/base-dados/int_composicao_alimentos.php?n0REd3kv7e86D%2BViXWYUnQ%3D%3D=WO%2FFDrUB5A65dJTL%2Fqtfhw%3D%3D',
+            'queijo prato': 'https://tbca.net.br/base-dados-en/int_food_composition.php?cod_produto=BRC0064G',
+        }
+        family = ('presunto' if text in ('presunto', 'presunto sem capa de gordura') else
+                  'queijo prato' if text in ('queijo', 'queijo prato') else None)
+        if family:
+            return {'grams': 20, 'source': 'TBCA, medida de referência para fatia média',
+                    'url': references[family], 'reference': family, 'size': size, 'unit': unit}
+    # A composite dish cannot inherit the weight of a single ingredient.
+    if words & {'suco', 'bolo', 'torta', 'pure', 'vitamina', 'doce', 'geleia', 'salada', 'frito', 'frita', 'assada', 'assado', 'cozida', 'cozido', 'com', 'recheado', 'recheada'}:
         return None
     for family, measure, reference_size, grams, page in MEASURES:
         if measure == unit and reference_size == size and set(family.split()) <= words:

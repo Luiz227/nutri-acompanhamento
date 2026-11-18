@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlsplit
-from records import Records
+from records import Records, sandwich_records
 from coaching import Coaching
 from messaging import Messaging
 from menu_coach import MenuCoach, MENU_READY
@@ -321,18 +321,19 @@ class Store:
                             text = 'Pronto! Separei algumas ideias de refeições com base no que você me contou. Seu guia vai logo abaixo.'
                         except (ValueError, TypeError, OverflowError):
                             text = 'Não consegui montar um guia que respeitasse o que você me contou. Pode me pedir outra versão?'
-                    elif self.allow_ai and body.get('record') is not None and not self.db.execute('SELECT id FROM photo_events WHERE id=?',(event['id'],)).fetchone():
+                    proposed = sandwich_records(event['text']) or body.get('record') if self.allow_ai else None
+                    if not job.get('documentRequested') and proposed is not None and not self.db.execute('SELECT id FROM photo_events WHERE id=?',(event['id'],)).fetchone():
                         try:
-                            text = self.records.propose(p['id'], event['id'], body['record'], auto_save=True)
+                            text = self.records.propose(p['id'], event['id'], proposed, auto_save=True)
                             attempted_record = True
-                            items = body['record'] if isinstance(body['record'], list) else [body['record']]
+                            items = proposed if isinstance(proposed, list) else [proposed]
                             saved_meal = any(isinstance(r, dict) and r.get('kind') == 'meal' for r in items)
                             if saved_meal and len(text) < 1640:
                                 invitation = self.menu.offer(p['id'])
                                 if invitation:
                                     text += '\n\n' + invitation
                         except (ValueError, TypeError, OverflowError):
-                            text = 'Antes de registrar, preciso confirmar os dados: refeições em gramas, água em ml/l, peso em kg/g, ou o texto da observação. Pode informar novamente?'
+                            text = 'Não consegui separar os alimentos ou as porções desse registro. Pode me dizer quantas unidades, fatias ou colheres você comeu? Uma estimativa serve.'
                 elif event['action'] == 'reply':
                     photo=self.db.execute('SELECT payload FROM photo_events WHERE id=?',(event['id'],)).fetchone()
                     if photo and json.loads(photo['payload']).get('records'):
@@ -446,7 +447,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 13, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 14, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if path == '/' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}
@@ -495,7 +496,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
                     if after < 0:
                         raise Problem(400, 'Cursor inválido.')
                     with store.lock:
-                        data = store.records.list(patient['id'], after, revisions=revisions, legacy_after=legacy_after)
+                        data = store.records.list(patient['id'], after, revisions=revisions, legacy_after=legacy_after, removals=query.get('removals') == ['1'])
                 elif path == '/api/v1/whatsapp' and self.command == 'DELETE':
                     data = store.revoke(token)
                 elif path == '/api/v1/context' and self.command == 'PUT':

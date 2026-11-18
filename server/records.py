@@ -19,6 +19,23 @@ def normalized(text):
                    if not unicodedata.combining(c))).strip()
 
 
+def sandwich_records(text):
+    """Recover an explicitly described single sandwich from a grouped proposal."""
+    name = normalized(text)
+    match = re.fullmatch(
+        r'(?:eu )?(?:comi|foi) (?:um|1) pao(?: frances)? com '
+        r'(?:(?:uma|1) fatia de )?presunto e (?:(?:uma|1) (?:fatia )?de )?queijo'
+        r'(?: (?:esse foi|foi|no) (?:o )?(?:meu )?cafe da manha| no cafe da manha)',
+        name,
+    )
+    if not match:
+        return None
+    return [
+        dict(kind='meal', text=food, unit=unit, quantity=1, mealType='breakfast')
+        for food, unit in (('Pão francês', 'unit'), ('Presunto', 'slice'), ('Queijo', 'slice'))
+    ]
+
+
 # Explicit synonyms only: never infer fat content, preparation, or bread type.
 FOOD_ALIASES = {
     'arroz branco': 'Arroz, tipo 1, cozido',
@@ -156,7 +173,27 @@ class Records:
 
     def reviewed(self, text):
         name=clean_food_name(text)
-        canonical = 'Mandioca, cozida' if name == 'mandioca' else FOOD_ALIASES.get(name)
+        defaults = {'mandioca': 'Mandioca, cozida', 'presunto': 'Presunto, sem capa de gordura',
+                    'queijo': 'Queijo, prato', 'farofa': 'Mandioca, farofa, temperada',
+                    'farofa de mandioca': 'Mandioca, farofa, temperada',
+                    'linguica frita': 'Lingüiça, porco, frita'}
+        canonical = defaults.get(name) or FOOD_ALIASES.get(name)
+        if name in ('feijoada', 'feijoada tradicional', 'feijoada com carne'):
+            # Representative recipe, not a measured plate or the TBCA recipe.
+            composition = {'Feijão, preto, cozido': .70, 'Porco, costela, assada': .15,
+                           'Lingüiça, porco, frita': .10, 'Toucinho, frito': .05}
+            foods = [(food, composition[food['name']]) for food in self.foods if food['name'] in composition]
+            if len(foods) != len(composition):
+                return None
+            columns = ('energy_kcal_100','proteins_100','carbohydrates_100','fat_100','fiber_100','sodium_100')
+            nutrients = {
+                key: sum(food['nutrients'][key] * fraction for food, fraction in foods)
+                if all(isinstance(food['nutrients'].get(key),(int,float)) for food, _ in foods) else None
+                for key in columns
+            }
+            return {'code':'recipe:feijoada-taco', 'name':'Feijoada tradicional (receita de referência)',
+                    'nutrients':nutrients, 'source':'Receita estimada com ingredientes da TACO/NEPA/UNICAMP (2011)',
+                    'referenceIds':[food['id'] for food, _ in foods]}
         if canonical:
             return next((f for f in self.foods if normalized(f['name'])==normalized(canonical)),None)
         words=set(name.split())
@@ -395,11 +432,12 @@ class Records:
         half = re.fullmatch(r'(?:na verdade )?(?:eu )?comi (?:so |apenas )?(?:a )?metade(?: (?:do|da) (.+))?', normalized_message)
         swap = re.fullmatch(r'(?:na verdade[, ]+)?(?:era|foi) (.{1,100}),?\s+(?:e )?n[aã]o (?:era |foi )?(.{1,100})',
                             text.strip().rstrip('.!'), re.I)
-        explicit = re.match(r'^(?:corrig[ae]|corrigir|corrige|correcao)\b', normalized_message)
-        if not (half or swap or explicit):
+        if swap and re.match(r'^(?:sei|sabia|tenho|lembro|medi|pesei|contei|comi|vou)\b', normalized(swap[2])):
+            swap = None
+        feijoada = re.fullmatch(r'(?:na verdade )?era (?:uma )?feijoada(?: pode corrigir essa)?', normalized_message)
+        explicit = re.match(r'^(?:(?:pode )?(?:corrig[ae]|corrigir|corrige)|correcao)\b', normalized_message)
+        if not (half or swap or explicit or feijoada):
             return None
-        if explicit and not (half or swap):
-            return 'Pode dizer “comi só metade” ou “era mandioca, não batata”? Vou usar a última refeição registrada.'
 
         # Edits retain the original creation time and event, even after resync.
         rows = self.db.execute("""
@@ -412,6 +450,12 @@ class Records:
         event = rows[0]['event_id'].rsplit('#', 1)[0]
         latest = [(row, json.loads(row['payload'])) for row in rows
                   if row['event_id'].rsplit('#', 1)[0] == event]
+        if feijoada:
+            return self.correct_photo_feijoada(latest)
+        if explicit and not (half or swap):
+            if any(normalized(record['text']) == 'feijoada' for _, record in latest):
+                return 'A feijoada já está no seu último registro. Quer ajustar a porção ou outro alimento?'
+            return 'O que você quer mudar na última refeição: o alimento ou a quantidade?'
         target = normalized(swap[2]) if swap else half[1]
         if target:
             matches = [(row, record) for row, record in latest
@@ -446,23 +490,50 @@ class Records:
             updates.append((row, record))
 
         for row, record in updates:
-            self.db.execute('INSERT OR IGNORE INTO record_original_cursors VALUES (?,?)', (row['id'], row['seq']))
-            self.db.execute('DELETE FROM records WHERE id=?', (row['id'],))
-            self.db.execute("""
-                INSERT INTO records(id, patient_id, event_id, payload, status, created, confirmed)
-                VALUES (?,?,?,?,'confirmed',?,?)
-            """, (row['id'], patient_id, row['event_id'], json.dumps(record), row['created'], row['confirmed']))
+            self.revise(row, record)
         summary = self.automatic_reply([record for _, record in updates])
         return 'Corrigi sua última refeição no diário.\n\n' + summary if len(summary) < 1730 else 'Corrigi sua última refeição no diário.'
 
-    def list(self, patient_id, after=0, revisions=False, legacy_after=0):
+    def revise(self, row, record, removed=False):
+        self.db.execute('INSERT OR IGNORE INTO record_original_cursors VALUES (?,?)', (row['id'], row['seq']))
+        self.db.execute('DELETE FROM records WHERE id=?', (row['id'],))
+        self.db.execute("""
+            INSERT INTO records(id, patient_id, event_id, payload, status, created, confirmed)
+            VALUES (?,?,?,?,?,?,?)
+        """, (row['id'], row['patient_id'], row['event_id'], json.dumps(record),
+              'removed' if removed else 'confirmed', row['created'], row['confirmed']))
+
+    def correct_photo_feijoada(self, latest):
+        if any(normalized(record['text']) == 'feijoada' for _, record in latest):
+            return 'A feijoada já está no seu diário. Se quiser, posso ajustar a porção.'
+        components = [(row, record) for row, record in latest
+                      if record.get('estimateSource') == 'photo' and
+                      re.search(r'\b(carne|linguica|feijao|bacon|costela|paio|toucinho|bife)\b',
+                                normalized(record['text']))]
+        if not components:
+            return 'Quais itens do último prato faziam parte da feijoada? Assim consigo corrigir sem apagar os acompanhamentos.'
+        row, first = components[0]
+        estimated = sum(item['quantity'] for _, item in components)
+        record = validate_record(dict(kind='meal', text='Feijoada', unit='g', quantity=estimated,
+                                      occurredAt=first['occurredAt'], mealType=first.get('mealType'),
+                                      estimateSource='photo'))
+        self.enrich_meals([record], auto_save=True)
+        if not record.get('foodCode'):
+            return 'Ainda não tenho uma receita de referência para recalcular esse prato.'
+        self.revise(row, record)
+        for old_row, old_record in components[1:]:
+            self.revise(old_row, old_record, removed=True)
+        return ('Corrigi o prato: agrupei os itens da feijoada e mantive os acompanhamentos. '
+                'A porção continua estimada pela foto.\n\n' + nutrition_line(record['nutrition']) + '.')
+
+    def list(self, patient_id, after=0, revisions=False, legacy_after=0, removals=False):
         cursor = 'r.seq' if revisions else 'COALESCE(c.original_seq,r.seq)'
         rows = self.db.execute(f"""
-            SELECT r.id,r.payload,{cursor} AS seq FROM records r
+            SELECT r.id,r.payload,r.status,{cursor} AS seq FROM records r
             LEFT JOIN record_original_cursors c ON c.record_id=r.id
-            WHERE r.patient_id=? AND r.status='confirmed' AND {cursor}>?
+            WHERE r.patient_id=? AND (r.status='confirmed' OR (? AND r.status='removed')) AND {cursor}>?
             AND (r.seq>? OR c.record_id IS NOT NULL)
             ORDER BY seq LIMIT 201
-        """, (patient_id, after, legacy_after if revisions else 0)).fetchall()
-        return {'records': [{'id': r['id'], 'seq': r['seq'], **json.loads(r['payload'])} for r in rows[:200]],
+        """, (patient_id, revisions and removals, after, legacy_after if revisions else 0)).fetchall()
+        return {'records': [{'id': r['id'], 'seq': r['seq'], **({'removed':True} if r['status']=='removed' else json.loads(r['payload']))} for r in rows[:200]],
                 'nextCursor': rows[min(len(rows), 200) - 1]['seq'] if rows else after, 'hasMore': len(rows) > 200}

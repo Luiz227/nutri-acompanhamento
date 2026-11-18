@@ -104,3 +104,37 @@ class ProgressTests(unittest.TestCase):
         meal = {'kind': 'meal', 'text': 'Arroz, tipo 1, cozido', 'quantity': 100, 'unit': 'g', 'mealType': 'lunch'}
         self.assertIn('meta diária de proteína', self.save('goal-protein-1', 'Almocei arroz', meal)['text'])
         self.assertNotIn('bateu', self.save('goal-protein-2', 'Mais arroz', meal)['text'])
+
+    def test_sandwich_uses_three_reference_portions_even_if_ai_groups_it(self):
+        self.verify()
+        self.store.allow_ai = True
+        job = self.save('sandwich-portions',
+            'Comi um pão francês com uma fatia de presunto e uma fatia de queijo esse foi o meu café da manhã',
+            {'kind':'meal','text':'Pão francês com presunto e queijo','unit':'unit','quantity':1,'mealType':'breakfast'})
+        self.assertIn('total da refeição',job['text'])
+        rows = self.store.records.list(self.patient['id'])['records']
+        self.assertEqual([r['quantity'] for r in rows],[50,20,20])
+        self.assertTrue(all(r['nutrition']['energyKcal'] > 0 for r in rows))
+        self.assertIsNone(self.store.records.correct_meal(self.patient['id'],
+            'foi um pão com presunto e queijo não sei a quantidade em g'))
+
+    def test_feijoada_replaces_photo_components_and_keeps_side_dishes(self):
+        self.verify()
+        self.store.allow_ai = True
+        patient = self.patient['id']
+        dishes = [{'kind':'meal','text':food,'unit':'g','quantity':grams,'mealType':'lunch',
+                   'estimateSource':'photo'} for food, grams in [
+                       ('arroz branco cozido',180),('carne bovina cozida',170),('linguiça frita',50),('farofa',30)]]
+        self.save('photo-before-feijoada','Meu almoço',dishes)
+        before = self.store.records.list(patient)
+        correction = self.store.ingest(self.event('Era uma feijoada','photo-feijoada-correction'),'nutri')
+        self.assertIn('mantive os acompanhamentos',correction['text'])
+        rows = self.store.records.list(patient,revisions=True)['records']
+        self.assertEqual({r['text'] for r in rows},{'arroz branco cozido','Feijoada','farofa'})
+        meal = next(r for r in rows if r['text']=='Feijoada')
+        self.assertEqual(meal['quantity'],220)
+        self.assertGreater(meal['nutrition']['energyKcal'],0)
+        updates=self.store.records.list(patient,before['nextCursor'],revisions=True,removals=True)['records']
+        self.assertEqual(sum(r.get('removed',False) for r in updates),1)
+        self.assertEqual(len(updates),2)
+        self.assertIn('já está',self.store.ingest(self.event('Pode corrigir essa','photo-feijoada-ack'),'nutri')['text'])

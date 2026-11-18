@@ -20,9 +20,11 @@ class IntakeRepository {
     await _intakeDataSource.upsertAllIntakes(intakeDBOs);
   }
 
-  Future<void> deleteIntake(IntakeEntity intakeEntity) async {
-    await _intakeDataSource.deleteIntakeFromId(intakeEntity.id);
-  }
+  Future<void> deleteIntake(IntakeEntity intakeEntity) =>
+      deleteIntakeById(intakeEntity.id);
+
+  Future<void> deleteIntakeById(String id) =>
+      _intakeDataSource.deleteIntakeFromId(id);
 
   Future<IntakeEntity?> updateIntake(
     String intakeId,
@@ -85,10 +87,12 @@ class IntakeRepository {
       toMeal: toMeal,
     );
     return rewrites
-        .map((pair) => (
-              IntakeEntity.fromIntakeDBO(pair.$1),
-              IntakeEntity.fromIntakeDBO(pair.$2),
-            ))
+        .map(
+          (pair) => (
+            IntakeEntity.fromIntakeDBO(pair.$1),
+            IntakeEntity.fromIntakeDBO(pair.$2),
+          ),
+        )
         .toList();
   }
 

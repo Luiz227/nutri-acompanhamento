@@ -255,8 +255,11 @@ class BridgeSession {
       }
       if (state['verified'] == true) {
         // Legacy clients could skip revisions while advancing their cursor.
-        final legacyAfter = (state['cursor'] as num?)?.toInt() ?? 0;
-        var cursor = (state['revisionCursor'] as num?)?.toInt() ?? 0;
+        final legacyAfter = max(
+          (state['cursor'] as num?)?.toInt() ?? 0,
+          (state['revisionCursor'] as num?)?.toInt() ?? 0,
+        );
+        var cursor = (state['removalCursor'] as num?)?.toInt() ?? 0;
         var cache = List<Map<String, dynamic>>.from(
           (state['records'] as List?)?.map(
                 (e) => Map<String, dynamic>.from(e as Map),
@@ -266,7 +269,7 @@ class BridgeSession {
         for (var page = 0; page < 20 && sameProfile; page++) {
           final data = await client.request(
             'GET',
-            '/api/v1/records?after=$cursor&revisions=1&legacyAfter=$legacyAfter',
+            '/api/v1/records?after=$cursor&revisions=1&removals=1&legacyAfter=$legacyAfter',
             token: state['token'] as String,
           );
           for (final raw in data['records'] as List) {
@@ -274,10 +277,10 @@ class BridgeSession {
             final record = Map<String, dynamic>.from(raw as Map);
             await _import(record);
             cache.removeWhere((r) => r['id'] == record['id']);
-            cache.add(record);
+            if (record['removed'] != true) cache.add(record);
           }
           cursor = (data['nextCursor'] as num).toInt();
-          state['revisionCursor'] = cursor;
+          state['removalCursor'] = cursor;
           state['records'] = cache.length > 200
               ? cache.sublist(cache.length - 200)
               : cache;
@@ -304,8 +307,12 @@ class BridgeSession {
 
   Future<void> _import(Map<String, dynamic> record) async {
     if (!sameProfile) return;
-    final date = DateTime.parse(record['occurredAt'] as String).toLocal();
     final id = 'whatsapp:${record['id']}';
+    if (record['removed'] == true) {
+      await locator<IntakeRepository>().deleteIntakeById(id);
+      return;
+    }
+    final date = DateTime.parse(record['occurredAt'] as String).toLocal();
     final amount = (record['quantity'] as num?)?.toDouble();
     if (record['kind'] == 'water' &&
         record['unit'] == 'ml' &&
