@@ -9,6 +9,7 @@ import difflib
 import random
 from nutrition_sources import ProductSource
 from food_composition import additional_food
+from pof import UNIT_LABELS, pof_food
 from portions import portion
 from photo_meals import clean_food_name
 from datetime import datetime, timezone, timedelta
@@ -105,8 +106,8 @@ def validate_record(raw):
         amount, unit = raw.get('quantity'), raw.get('unit')
         if isinstance(amount, bool) or not isinstance(amount, (float, int)) or not math.isfinite(amount) or amount <= 0:
             raise ValueError('Confirme a quantidade e a unidade antes de registrar.')
-        if raw['kind'] == 'meal' and unit in ('unit', 'slice'):
-            measure = portion(text, unit, raw.get('portionSize', 'medium'))
+        if raw['kind'] == 'meal' and unit in tuple(UNIT_LABELS):
+            measure = portion(text, unit, raw.get('portionSize', 'medium'), raw.get('portionFill'))
             if not measure or amount > 30:
                 raise ValueError('Para esse alimento ainda não tenho uma medida média confiável. Você consegue dizer o tamanho ou uma quantidade aproximada em gramas?')
             result.update(estimated=True, portionCount=amount, portionReference=measure,
@@ -270,9 +271,7 @@ class Records:
             elif record['kind'] == 'meal':
                 label = MEAL_LABELS.get(record.get('mealType'), 'refeição').lower()
                 if record.get('estimateSource') == 'household':
-                    measure = 'fatia' if record['portionReference']['unit'] == 'slice' else 'unidade'
-                    if record['portionCount'] != 1:
-                        measure += 's'
+                    measure = UNIT_LABELS[record['portionReference']['unit']][record['portionCount'] != 1]
                     paragraphs.append(f"{random.choice(introductions)} no {label}: {record['portionCount']:g} {measure} de {record['text']}. Considerei aproximadamente {record['quantity']:g} g pela medida média.")
                 elif record.get('estimateSource') == 'photo':
                     paragraphs.append(f"Pela foto, anotei no {label} aproximadamente {record['quantity']:g} g de {record['text']}. O peso foi estimado pela imagem.")
@@ -352,7 +351,8 @@ class Records:
                 if auto_save and record.get('barcode'):
                     food = self.products.product(record['barcode'])
                 elif not food and auto_save:
-                    food = (self.reviewed(record['text'])
+                    food = (pof_food(record['text'])
+                            or self.reviewed(record['text'])
                             or additional_food(record['text'], record.get('catalogueQuery'))
                             or self.closest(record['text']))
                     if food:

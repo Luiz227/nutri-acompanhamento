@@ -23,5 +23,8 @@
 !Dockerfile
 
 !server/food_composition.py
+!server/pof.py
+!tool/
+!tool/import_ibge_pof.py
 !assets/data/food_composition_extra.json
 !assets/data/FOOD-COMPOSITION-NOTICE.txt

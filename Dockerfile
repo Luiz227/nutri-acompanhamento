@@ -1,3 +1,8 @@
+FROM python:3.13-slim AS pof
+WORKDIR /build
+COPY tool/import_ibge_pof.py .
+RUN pip install --no-cache-dir xlrd==2.0.2 && python import_ibge_pof.py food_pof.json
+
 FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 DATA_DIR=/data PORT=8080
 WORKDIR /app
@@ -11,6 +16,8 @@ COPY server/nutrition_sources.py server/menu_coach.py server/patient_profile.py 
 COPY server/portions.py /app/
 COPY server/meal_pdf.py /app/
 COPY server/food_composition.py /app/
+COPY server/pof.py /app/
+COPY --from=pof /build/food_pof.json /app/
 COPY assets/data/food_composition_extra.json /app/
 COPY assets/data/FOOD-COMPOSITION-NOTICE.txt /app/legal/
 COPY server/photo_meals.py server/daily_progress.py /app/
