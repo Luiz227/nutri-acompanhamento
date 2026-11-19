@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 from coaching import BRASILIA
 from daily_progress import diary_rows, summarize
 from web_accounts import AuthError, SESSION_SECONDS
+from web_features import feature_request
 
 COOKIE = '__Host-garfofala_session'
 STATIC = {'/': ('index.html', 'text/html; charset=utf-8'),
@@ -77,6 +78,17 @@ def handle_web(handler, store, path, body):
     except CookieError:
         token = ''
     data, new_cookie = None, None
+    feature_paths = {'/web-api/evolution', '/web-api/profile', '/web-api/preferences', '/web-api/foods',
+                     '/web-api/entry', '/web-api/remove-entry', '/web-api/export',
+                     '/web-api/library', '/web-api/library-remove', '/web-api/library-log'}
+    if path in feature_paths:
+        with store.lock, store.db:
+            patient = auth.patient(token)
+            data = feature_request(store, patient, path, handler.command, body, parse_qs(urlsplit(handler.path).query))
+            if data is None:
+                raise AuthError(405, 'Método não permitido.')
+        handler.reply(200, data)
+        return True
     if path in ('/web-api/signup', '/web-api/forgot-password') and handler.command == 'POST':
         data = auth.start('signup' if path.endswith('signup') else 'reset', body)
     elif path in ('/web-api/verify-signup', '/web-api/reset-password') and handler.command == 'POST':
@@ -111,7 +123,9 @@ def handle_web(handler, store, path, body):
         if 'day' in query:
             selected = date.fromisoformat(query['day'][0])
             with store.lock:
-                records = [record for _, record in diary_rows(store.db, patient['id'], selected)]
+                rows = store.db.execute("SELECT id,payload FROM records WHERE patient_id=? AND status='confirmed'", (patient['id'],)).fetchall()
+                records = [{'id': row['id'], **json.loads(row['payload'])} for row in rows
+                           if datetime.fromisoformat(json.loads(row['payload'])['occurredAt']).astimezone(BRASILIA).date() == selected]
             records.sort(key=lambda record: record['occurredAt'])
             handler.reply(200, {'date': selected.isoformat(), 'records': records})
             return True

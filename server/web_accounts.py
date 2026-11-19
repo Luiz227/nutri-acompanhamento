@@ -81,6 +81,9 @@ class WebAccounts:
           CREATE TABLE IF NOT EXISTS web_auth_attempts (
             bucket TEXT NOT NULL, created REAL NOT NULL);
           CREATE INDEX IF NOT EXISTS web_auth_attempt_time ON web_auth_attempts(bucket, created);
+          CREATE TABLE IF NOT EXISTS web_library (
+            id TEXT PRIMARY KEY, patient_id TEXT NOT NULL REFERENCES patients(id),
+            kind TEXT NOT NULL, name TEXT NOT NULL, foods TEXT NOT NULL, created REAL NOT NULL);
         ''')
         self.db.commit()
 

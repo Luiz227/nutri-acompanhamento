@@ -19,6 +19,7 @@ COPY server/food_composition.py /app/
 COPY server/pof.py /app/
 COPY server/menu_foods.py /app/
 COPY server/web_accounts.py server/web_http.py /app/
+COPY server/web_features.py /app/
 COPY web/ /app/web/
 COPY server/meal_pdf_template.py /app/
 COPY assets/data/menu-cover-fruit.jpg /app/

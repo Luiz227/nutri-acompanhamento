@@ -27,6 +27,7 @@
 !server/menu_foods.py
 !server/web_accounts.py
 !server/web_http.py
+!server/web_features.py
 !web/
 !web/index.html
 !web/app.js

@@ -20,7 +20,7 @@ PUBLIC_BASE_URL=https://testee-nutri-api.flgmd4.easypanel.host
 `PUBLIC_BASE_URL` deve ser exatamente a origem HTTPS usada para abrir o site, sem caminho adicional. Se adicionar um domínio próprio ao site, atualize essa variável para o novo endereço. A chave em `EVOLUTION_API_KEY` é a credencial usada para enviar mensagens pela Evolution. Ela fica somente no servidor.
 
 5. Clique em **Implantar**.
-6. Abra `/healthz`. Confira `apiVersion: 23` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
+6. Abra `/healthz`. Confira `apiVersion: 24` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
 7. Abra o domínio do serviço para acessar o site. O endereço informado no aplicativo e em `backendBaseUrl` do n8n continua atendendo as rotas de API.
 
 ## Cadastro, acesso e recuperação
@@ -40,6 +40,19 @@ Senhas usam Argon2id com salt individual. O banco guarda hashes das sessões e a
 O fluxo atual permanece responsável pela conversa, os registros, os PDFs e os lembretes. O envio dos códigos da conta web é feito por um processo separado da API usando a Evolution. O cadastro web confirmado aciona o webhook de cadastro já existente para iniciar ou retomar o acompanhamento.
 
 Não é necessário importar outro fluxo n8n para adicionar o login web. Preserve `N8N_REGISTRATION_WEBHOOK`, `N8N_APP_WEBHOOK_SECRET` e `NUTRI_SERVICE_TOKEN`.
+
+## Painel web 0.23
+
+- **Diário** com refeições por categoria e data, nutrientes, registro manual de água, peso, alimentos e observações, edição e exclusão. A busca usa o catálogo do servidor; o código de barras consulta o Open Food Facts. Os cálculos usam o mesmo resolvedor nutricional do WhatsApp.
+- **IMC** no resumo e na evolução, calculado com a última pesagem confirmada e a altura do perfil. Sem pesagens, usa o peso do perfil. Não cria pesagens históricas fictícias. A classificação adulta só aparece a partir dos 20 anos.
+- **Evolução** com gráfico de peso, variação registrada, meta, histórico e períodos de 7, 30, 90 e 365 dias. Médias nutricionais usam somente os dias com refeições e valores completos; dias sem dados são identificados.
+- **Perfil e metas** permite editar nascimento, gênero, altura, peso do perfil, objetivo, atividade, peso desejado e metas de calorias, macros e água. Os dados ficam disponíveis no contexto da IA.
+- **Receitas e favoritos** guarda combinações por conta, calcula os nutrientes e permite adicionar uma porção ao diário. A biblioteca web é própria; não importa automaticamente receitas locais do Android.
+- **Ajustes** com nome preferido, autorização e horários dos lembretes de água e exportação do perfil, biblioteca e diário em JSON.
+
+Os registros criados, editados ou excluídos no site usam os cursores de revisão já consumidos pelo aplicativo. A atualização aparece após a sincronização do app. O site mostra os registros existentes no servidor; dados que existem somente no armazenamento local do Android não aparecem automaticamente no site. O envio de fotos e áudios continua pelo WhatsApp.
+
+Esta versão amplia as funções web, mas não é uma cópia integral do aplicativo. Integrações nativas de saúde, múltiplos perfis locais, atividades físicas locais, importação dos formatos originais do app, scanner por câmera e configurações locais de aparência/unidades ainda não foram portados. Não conecte contas de pessoas diferentes para compartilhar uma sessão web.
 
 ## Teste após implantar
 

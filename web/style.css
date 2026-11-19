@@ -12,7 +12,7 @@ nav { display: flex; gap: 24px; align-items: center; }
 .nav-logout { width: auto; margin: 0; padding: 10px 22px; }
 .auth-form label { display: block; margin: 12px 0 6px; font-weight: 600; }
 .auth-form .check { display: flex; font-weight: 400; }
-.auth-form .field, .diary-heading .field {
+.field {
   display: block; width: 100%; padding: 11px 13px; border: 1px solid #a8b8ad;
   border-radius: 10px; background: #fff; color: var(--ink); font: inherit;
 }
@@ -60,3 +60,34 @@ nav { display: flex; gap: 24px; align-items: center; }
   .diary-heading { align-items: end; }
   .diary-heading label { max-width: 153px; }
 }
+
+.account-tabs { display:flex; gap:8px; overflow-x:auto; padding:16px 0 24px; border-bottom:1px solid #dce7dd; margin-bottom:24px; }
+.account-tabs button { width:auto; min-width:max-content; background:#edf3e9; padding:12px 22px; margin:0; color:#004c43; border-radius:40px; }
+.account-tabs button[aria-current] { background:#004c43; color:#dafa86; }
+.quick-actions { display:flex; gap:10px; flex-wrap:wrap; margin:24px 0; }
+.quick-actions button { width:auto; flex:1; min-width:120px; font-size:14px; padding:14px; }
+.form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0; }
+.form-grid label { margin:0; }
+.chart-card { background:#f7f9f2; border:1px solid #dce7dd; border-radius:20px; padding:24px; margin:24px 0; }
+.chart-card h4 { margin:0 0 12px; font-size:18px; }
+.chart svg { width:100%; display:block; }
+.chart-label { font:12px system-ui; fill:#526e65; }
+.chart-grid { stroke:#dbe5db; stroke-width:1; }
+.chart-target { stroke:#718e29; stroke-dasharray:6 4; }
+.weight-line { fill:none; stroke:#006453; stroke-width:3; stroke-linejoin:round; }
+.weight-dot { fill:#006453; stroke:#fff; stroke-width:2; }
+.history-row { display:flex; align-items:center; gap:18px; justify-content:space-between; padding:13px 0; border-bottom:1px solid #dde6dc; margin:0; font-size:14px; }
+.daily-history-list { max-height:400px; overflow-y:auto; margin-top:20px; }
+.profile-item small { color:#526e65; font-size:12px; margin-top:6px; }
+.record-actions { display:flex; gap:14px; margin-top:8px; }
+.text-button { width:auto; padding:4px 0; margin:0; border:0; background:transparent; text-decoration:underline; color:#006453; font-size:13px; }
+.inline-fields { display:flex; align-items:center; gap:10px; }
+.inline-fields button { margin-top:0; }
+dialog { color:#004c43; background:#fffef9; border:1px solid #d9e5d9; border-radius:24px; padding:28px; max-width:540px; width:calc(100% - 32px); max-height:90vh; overflow:auto; }
+dialog::backdrop { background:#002f29a8; }
+dialog .account-heading { margin-bottom:20px; }
+dialog #entry-status { color:#9d3420; font-size:14px; }
+@media(max-width:560px) { .form-grid { grid-template-columns:1fr; gap:12px; } .account-tabs button { padding:10px 16px; font-size:13px; } .chart-card { padding:16px; } .history-row { gap:8px; font-size:12px; } dialog { padding:20px; } .profile-data { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.ingredient-row { display:grid;grid-template-columns:2fr 1fr auto;gap:12px;align-items:center;margin-bottom:12px; }
+.ingredient-row label { margin:0; }
+@media(max-width:560px) { .ingredient-row { grid-template-columns:1fr 1fr; } .ingredient-row label:first-child { grid-column:1 / -1; } }

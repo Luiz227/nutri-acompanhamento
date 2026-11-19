@@ -100,12 +100,75 @@
 <div id="dashboard" hidden>
 <div class="account-heading"><div><p class="eyebrow" id="account-date"></p><h2 id="account-name">Seu acompanhamento</h2><p id="account-phone" class="help"></p></div><button id="refresh" class="secondary compact" type="button">Atualizar</button></div>
 <p id="connection-state" class="success"></p>
+<nav class="account-tabs" aria-label="Sua conta">
+<button type="button" data-panel="diary" aria-current="page">Diário</button>
+<button type="button" data-panel="evolution">Evolução</button>
+<button type="button" data-panel="profile">Perfil e metas</button>
+<button type="button" data-panel="library">Receitas e favoritos</button>
+<button type="button" data-panel="settings">Ajustes</button>
+</nav>
+<section data-account-panel="diary">
 <div id="profile-data" class="profile-data"></div>
 <h3 class="dashboard-title">Seu progresso de hoje</h3>
 <div id="daily-goals" class="daily-goals"></div>
+<div class="quick-actions"><button type="button" data-add="meal">+ Refeição</button><button type="button" data-add="water">+ Água</button><button type="button" data-add="weight">+ Peso</button><button type="button" data-add="observation">+ Observação</button></div>
 <div class="diary-heading"><h3>Seu diário</h3><label for="diary-date">Data<input class="field" id="diary-date" type="date"></label></div>
 <div id="diary-records" class="diary-records"></div>
 <p class="help">Envie suas refeições e registros pelo WhatsApp. Eles aparecem aqui e no aplicativo.</p>
+</section>
+<section data-account-panel="evolution" hidden>
+<div class="diary-heading"><div><p class="eyebrow">UM PASSO DE CADA VEZ</p><h3>Sua evolução</h3></div><label for="evolution-days">Período<select id="evolution-days" class="field"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="365">1 ano</option></select></label></div>
+<div id="body-metrics" class="profile-data"></div>
+<p class="help" id="bmi-note"></p>
+<div class="chart-card"><h4>Peso ao longo do tempo</h4><div id="weight-chart" class="chart" role="img" aria-label="Evolução do peso"></div><p id="weight-summary" class="help"></p></div>
+<div class="chart-card"><h4>Energia e hidratação</h4><p class="help">Cada linha representa um dia. Dias sem registro ficam indicados.</p><div id="daily-history"></div></div>
+<div class="chart-card"><h4>Histórico de pesagens</h4><div id="weight-history"></div><button type="button" data-add="weight" class="secondary">Registrar meu peso</button></div>
+</section>
+<section data-account-panel="profile" hidden>
+<h3>Seu perfil e suas metas</h3><p class="help">As alterações ficam disponíveis para a assistente no WhatsApp.</p>
+<form id="edit-profile">
+<div class="form-grid">
+<label>Data de nascimento<input class="field" id="edit-birthday" type="date" required></label>
+<label>Gênero<select class="field" id="edit-gender" required><option value="female">Feminino</option><option value="male">Masculino</option><option value="nonBinary">Não binário</option></select></label>
+<label>Altura (cm)<input class="field" id="edit-height" type="number" min="30" max="300" step="0.1" required></label>
+<label>Peso do perfil (kg)<input class="field" id="edit-weight" type="number" min="1" max="600" step="0.1" required></label>
+<label>Objetivo<select class="field" id="edit-goal"><option value="loseWeight">Perder peso</option><option value="maintainWeight">Manter peso</option><option value="gainWeight">Ganhar peso</option></select></label>
+<label>Atividade física<select class="field" id="edit-activity"><option value="sedentary">Sedentário</option><option value="lowActive">Pouco ativo</option><option value="active">Ativo</option><option value="veryActive">Muito ativo</option></select></label>
+<label>Peso desejado (kg)<input class="field" id="edit-target" type="number" min="1" max="600" step="0.1"></label>
+</div><h4>Metas diárias</h4><p class="help">Você pode manter ou ajustar as metas já configuradas na conta.</p><div class="form-grid" id="edit-goals"></div>
+<button type="submit">Salvar perfil e metas</button>
+</form>
+</section>
+<section data-account-panel="settings" hidden>
+<h3>Do seu jeito</h3><form id="preferences-form">
+<label for="preferred-name">Como prefere ser chamado(a)?</label><input class="field" id="preferred-name" maxlength="60" autocomplete="given-name">
+<label class="check"><input id="water-reminders" type="checkbox"><span>Quero receber lembretes de água pelo WhatsApp.</span></label>
+<label for="reminder-hours">Horários dos lembretes</label><input class="field" id="reminder-hours" placeholder="09:00, 12:00, 15:00, 18:00" required><p class="help">Até seis horários, separados por vírgula, no horário de Brasília. Os lembretes param no dia em que a meta de água é atingida.</p>
+<button type="submit">Salvar preferências</button></form>
+<div class="chart-card"><h4>Seus dados</h4><p class="help">Baixe seu perfil e os registros sincronizados da conta.</p><button type="button" id="export-data" class="secondary">Exportar dados em JSON</button></div>
+<div class="chart-card"><h4>Senha de acesso</h4><p class="help">Para trocar a senha, saia da conta e use “Esqueci minha senha”. O código chega ao seu WhatsApp.</p></div>
+</section>
+<section data-account-panel="library" hidden>
+<h3>Receitas e favoritos</h3><p class="help">Guarde combinações que você costuma comer para registrar novamente sem digitar tudo.</p>
+<div class="chart-card"><h4>Salvar uma combinação</h4><form id="library-form">
+<div class="form-grid"><label>Nome<input class="field" id="library-name" maxlength="120" placeholder="Meu café da manhã" required></label><label>Tipo<select class="field" id="library-kind"><option value="recipe">Receita</option><option value="favorite">Favorito</option></select></label></div>
+<p class="help">Informe os alimentos e as quantidades de uma porção. Use os nomes da busca do diário para facilitar o cálculo nutricional.</p><div id="recipe-ingredients"></div>
+<button type="button" id="add-ingredient" class="secondary">+ Ingrediente</button><button type="submit">Salvar na minha biblioteca</button>
+</form></div>
+<div class="form-grid"><label>Adicionar ao diário de<input class="field" id="library-date" type="datetime-local" required></label><label>Na refeição<select class="field" id="library-meal"><option value="breakfast">Café da manhã</option><option value="lunch">Almoço</option><option value="snack">Lanche</option><option value="dinner">Jantar</option></select></label></div>
+<div id="library-items"></div>
+</section>
+<dialog id="entry-dialog" aria-labelledby="entry-title">
+<form id="entry-form"><div class="account-heading"><h3 id="entry-title">Novo registro</h3><button type="button" id="entry-close" class="secondary compact" aria-label="Fechar">✕</button></div>
+<input id="entry-id" type="hidden"><input id="entry-kind" type="hidden">
+<label for="entry-date">Data e horário</label><input id="entry-date" class="field" type="datetime-local" required>
+<div id="entry-meal-fields"><label for="entry-meal">Refeição</label><select class="field" id="entry-meal"><option value="breakfast">Café da manhã</option><option value="lunch">Almoço</option><option value="snack">Lanche</option><option value="dinner">Jantar</option></select>
+<label for="entry-barcode">Código de barras <small>opcional</small></label><div class="inline-fields"><input class="field" id="entry-barcode" inputmode="numeric" maxlength="14"><button type="button" id="lookup-barcode" class="secondary compact">Consultar</button></div>
+</div>
+<label for="entry-text" id="entry-text-label">Alimento</label><input class="field" id="entry-text" maxlength="600" list="food-options" required autocomplete="off"><datalist id="food-options"></datalist>
+<div id="quantity-fields" class="form-grid"><label>Quantidade<input class="field" id="entry-quantity" type="number" min="0.1" step="any" required></label><label>Unidade<select class="field" id="entry-unit"><option value="g">g</option><option value="unit">unidade média</option><option value="slice">fatia</option><option value="ml">ml</option><option value="l">litro</option><option value="kg">kg</option></select></label></div>
+<p class="help" id="entry-help"></p><p id="entry-status" role="status"></p><button type="submit">Salvar no diário</button>
+</form></dialog>
 </div>
 <p id="status" role="status" aria-live="polite"></p>
 </section>
