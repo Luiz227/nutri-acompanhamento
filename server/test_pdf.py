@@ -4,7 +4,7 @@ import re
 import unittest
 from unittest.mock import patch
 import test_app as fixtures
-from meal_pdf import make_pdf, validate_plan, calculate_portions
+from meal_pdf import make_pdf, validate_plan, calculate_portions, DAYS
 from example_menu import PLAN
 
 
@@ -13,6 +13,25 @@ class PdfTests(unittest.TestCase):
     tearDown=fixtures.BridgeTests.tearDown
     verify=fixtures.BridgeTests.verify
     event=fixtures.BridgeTests.event
+
+    def test_weekly_reference_format_has_seven_days_and_twenty_seven_pages(self):
+        plan = copy.deepcopy(PLAN)
+        names = ['Pão, trigo, forma, integral', 'Banana, prata, crua', 'Arroz, tipo 1, cozido',
+                 'Iogurte, natural', 'Frango, peito, sem pele, grelhado']
+        for meal, name in zip(plan['meals'], names):
+            meal['foods'] = [{'name': name, 'grams': 200}]
+        weekly = {'days': [{'day': day, 'meals': copy.deepcopy(plan['meals'])} for day in DAYS],
+                  'shopping': plan['shopping'], 'tips': plan['tips']}
+        app = {'dailyGoals': {'energyKcal': 2200}}
+        pdf = make_pdf(weekly, 'Demonstração', app, {}, demo=True, resolve=self.store.records.enrich_menu)
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page\b', pdf)), 27)
+        self.assertEqual(self.store.records.list(self.patient['id'])['records'], [])
+        with self.assertRaises(ValueError):
+            make_pdf(weekly, 'Demonstração', app, {'foodPreferences': 'Não como frango'},
+                     resolve=self.store.records.enrich_menu)
+        weekly['days'][1]['day'] = 'monday'
+        with self.assertRaises(ValueError):
+            make_pdf(weekly, 'Demonstração', app, {}, resolve=self.store.records.enrich_menu)
 
     def test_six_ingredient_lunch_and_fifteen_shopping_items_generate_pdf(self):
         plan = copy.deepcopy(PLAN)

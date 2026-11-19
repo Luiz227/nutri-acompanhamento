@@ -183,10 +183,20 @@ test('PDF schema is added only to a server-authorized menu request',()=>{
   const normal=makePrompt(job(),'model-test');
   const pdf=makePrompt({...job(),documentRequested:true},'model-test');
   assert.equal(pdf.messages.length,normal.messages.length+1);
-  assert.ok(pdf.messages.some(m=>m.content.includes('Exatamente cinco meals')));
+  assert.ok(pdf.messages.some(m=>m.content.includes('Exatamente sete days')));
   const value=parseAssistantResult({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Vou organizar as sugestões.',record:null,plan:{meals:[],shopping:[],tips:[]}})}}]});
   assert.deepEqual(value.plan,{meals:[],shopping:[],tips:[]});
   assert.equal(value.record,null);
+  const weekly={days:['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].map(day=>({
+    day,meals:['breakfast','morningSnack','lunch','snack','dinner'].map(mealType=>({
+      mealType,suggestion:'Uma combinação dos alimentos de sua preferência para esta refeição.',
+      alternative:'Uma troca com ingredientes que você informou gostar, ajustada à rotina.',
+      foods:Array.from({length:5},()=>({name:'Frango, peito, sem pele, grelhado',grams:100})),
+    })),
+  }))};
+  const content=JSON.stringify({reply:'Seu cardápio semanal.',record:null,plan:weekly});
+  assert.ok(content.length>12000);
+  assert.deepEqual(parseAssistantResult({choices:[{finish_reason:'stop',message:{content}}]}).plan,weekly);
 });
 
 

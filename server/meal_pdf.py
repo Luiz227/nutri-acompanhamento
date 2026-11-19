@@ -44,6 +44,11 @@ def validate_plan(raw):
             raise ValueError('Refeição inválida.')
         result['meals'].append({'mealType': meal['mealType'], 'suggestion': text(meal.get('suggestion'), 240),
                                 'alternative': text(meal.get('alternative'), 180)})
+        if meal.get('time') is not None:
+            import re
+            if not isinstance(meal['time'], str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', meal['time']):
+                raise ValueError('Horário da refeição inválido.')
+            result['meals'][-1]['time'] = meal['time']
         if 'foods' in meal:
             foods = meal['foods']
             if not isinstance(foods, list) or not 1 <= len(foods) <= 8:
@@ -111,12 +116,29 @@ def calculate_portions(plan, app, resolve):
     return {'meals': meals, 'totals': totals, 'target': target}
 
 
-def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
-    from reportlab.lib import colors
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import Paragraph
-    from reportlab.lib.pagesizes import A4
-    plan = validate_plan(plan)
+DAYS = {'monday': 'Segunda-Feira', 'tuesday': 'Terça-Feira', 'wednesday': 'Quarta-Feira',
+        'thursday': 'Quinta-Feira', 'friday': 'Sexta-Feira', 'saturday': 'Sábado', 'sunday': 'Domingo'}
+
+
+def make_weekly_pdf(raw, name, app, preferences, demo=False, resolve=None):
+    from meal_pdf_template import render_weekly
+    days = raw.get('days')
+    if not isinstance(days, list) or len(days) != 7:
+        raise ValueError('Organize os sete dias da semana no cardápio.')
+    prepared = {}
+    for day in days:
+        if not isinstance(day, dict) or day.get('day') not in DAYS or day['day'] in prepared:
+            raise ValueError('Não repita ou omita dias da semana.')
+        plan = validate_plan({'meals': day.get('meals'), 'shopping': raw.get('shopping'), 'tips': raw.get('tips')})
+        validate_preferences(plan, preferences)
+        calculated = calculate_portions(plan, app, resolve)
+        if not calculated:
+            raise ValueError('Defina a meta calórica no aplicativo antes do cardápio semanal.')
+        prepared[day['day']] = {'plan': plan, 'calculated': calculated}
+    return render_weekly({key: prepared[key] for key in DAYS}, name, app, preferences, demo)
+
+
+def validate_preferences(plan, preferences):
     if preferences:
         import re
         health=plain(str(preferences.get('restrictionsAndHealth','')))
@@ -138,6 +160,17 @@ def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
         ]:
             if re.search(trigger,health) and re.search(r'\b(?:'+ingredients+r')\b',foods):
                 raise ValueError('As sugestões precisam respeitar a restrição informada.')
+
+
+def make_pdf(plan, name, app, preferences, demo=False, resolve=None):
+    if isinstance(plan, dict) and "days" in plan:
+        return make_weekly_pdf(plan, name, app, preferences, demo=demo, resolve=resolve)
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph
+    from reportlab.lib.pagesizes import A4
+    plan = validate_plan(plan)
+    validate_preferences(plan, preferences)
     calculated = calculate_portions(plan, app, resolve) if resolve else None
     if calculated:
         for meal in plan['meals']:

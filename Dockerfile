@@ -18,6 +18,9 @@ COPY server/meal_pdf.py /app/
 COPY server/food_composition.py /app/
 COPY server/pof.py /app/
 COPY server/menu_foods.py /app/
+COPY server/meal_pdf_template.py /app/
+COPY assets/data/menu-cover-fruit.jpg /app/
+COPY assets/data/menu-wheel-breakfast.jpg assets/data/menu-wheel-snack.jpg assets/data/menu-wheel-lunch.jpg /app/
 COPY --from=pof /build/food_pof.json /app/
 COPY assets/data/food_composition_extra.json /app/
 COPY assets/data/FOOD-COMPOSITION-NOTICE.txt /app/legal/

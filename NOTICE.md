@@ -52,3 +52,5 @@ A versão 0.9 adapta a apresentação do PDF à referência visual fornecida pel
 A distribuição GarfoFala 0.12 acrescenta a identidade visual da GarfoFala, avisos de metas, pausa de lembretes após a meta de água e melhorias no guia de alimentação e na análise de fotos. Os créditos e a licença do projeto de origem continuam aplicáveis.
 
 GarfoFala 0.14 adiciona bases de composição complementares do USDA FoodData Central e CoFID. Os créditos e as licenças das bases estão em assets/data/FOOD-COMPOSITION-NOTICE.txt.
+
+GarfoFala 0.19 adapta o formato semanal do PDF de referência fornecido pelo responsável pelo projeto. A capa e os diagramas em assets/data/menu-cover-fruit.jpg e menu-wheel-*.jpg derivam das ilustrações desse documento, identificado como material de Allini Perissini. Os direitos dessas ilustrações permanecem com seus respectivos titulares. A licença GPL do código não amplia os direitos sobre esse material gráfico. Os dados e cardápios do documento de referência não são incorporados ao gerador.

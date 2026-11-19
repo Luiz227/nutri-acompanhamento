@@ -25,6 +25,11 @@
 !server/food_composition.py
 !server/pof.py
 !server/menu_foods.py
+!server/meal_pdf_template.py
+!assets/data/menu-cover-fruit.jpg
+!assets/data/menu-wheel-breakfast.jpg
+!assets/data/menu-wheel-snack.jpg
+!assets/data/menu-wheel-lunch.jpg
 !tool/
 !tool/import_ibge_pof.py
 !assets/data/food_composition_extra.json

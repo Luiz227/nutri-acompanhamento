@@ -71,6 +71,7 @@ http('Consultar IA', 'https://api.openai.com/v1/chat/completions', '={{ JSON.str
 const aiNode = nodes.find(n => n.name === 'Consultar IA');
 aiNode.parameters.authentication = 'predefinedCredentialType';
 aiNode.parameters.nodeCredentialType = 'openAiApi';
+aiNode.parameters.options.timeout = 120000;
 delete aiNode.parameters.genericAuthType;
 aiNode.credentials = { openAiApi: { name: 'Nutri - OpenAI' } };
 code('Ler resposta da IA', [agent.parseAssistantResult],
