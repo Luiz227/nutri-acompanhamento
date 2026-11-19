@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+:root{--ink:#153a2e;--muted:#52635b;--paper:#f8f6ed;--line:#dce2d8;--lime:#e3f381;--green:#195643}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 "DM Sans",Arial,sans-serif}a{color:inherit}button,input{font:inherit}[hidden]{display:none!important}.top,main,footer{width:min(1152px,calc(100% - 96px));margin:auto}.top{height:94px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.brand{display:inline-flex;align-items:center;flex-shrink:0}.brand img{display:block;width:220px;height:auto}.top-link{font-weight:700;text-decoration:none}.top-link span{margin-left:8px}main{display:grid;grid-template-columns:minmax(0,1.11fr) minmax(0,.89fr);gap:58px;padding:58px 0 52px;align-items:start}.eyebrow,.badge,.bubble-label{font-size:11px;font-weight:800;letter-spacing:.13em}.eyebrow{color:var(--green)}h1,h2,h3,p{margin:0}h1{margin:12px 0 17px;font:800 clamp(44px,5.7vw,83px)/.98 Manrope,Arial,sans-serif;letter-spacing:-.079em}h1 em{display:block;color:#286d54;font-style:normal}.intro>p{max-width:450px;color:var(--muted);font-size:17px}.visual{position:relative;margin-top:26px;height:285px;overflow:hidden;border-radius:25px;background:#a1b299}.food{width:100%;height:100%;object-fit:cover;object-position:center 55%;display:block}.bubble{position:absolute;bottom:15px;left:15px;background:#fffcf4;border-radius:16px;padding:12px 17px;box-shadow:0 6px 22px #17352d28}.bubble-label{color:#4d6d5e;font-size:9px}.bubble p{font-weight:700;font-size:15px;margin:2px 0}.bubble small{color:var(--muted)}.signup{background:#fffef9;border:1px solid var(--line);box-shadow:0 17px 60px #153a2e0a;border-radius:30px;padding:34px;scroll-margin:20px}.badge{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:20px;background:#eef4df}.badge span,.bubble-label span{display:inline-block;width:7px;height:7px;border-radius:100%;background:#549564}.signup h2{font:800 clamp(29px,3vw,42px)/1.12 Manrope,Arial,sans-serif;letter-spacing:-.055em;margin-top:15px}.lead{color:var(--muted);margin:10px 0 25px}.signup label:not(.check){display:block;font-weight:700;margin-bottom:6px}.number{display:flex;align-items:center;border:1px solid #a8b8ad;border-radius:12px;background:white;overflow:hidden}.number span{padding:12px;border-right:1px solid var(--line);font-weight:700}.number input{flex:1;min-width:0;border:0;padding:12px;background:none;color:var(--ink)}.number:focus-within{outline:2px solid #267f61;outline-offset:2px}.number input:focus{outline:none}.help,.check,.signup details{font-size:13px;color:var(--muted)}.help{display:block;margin-top:6px}.check{display:flex;align-items:flex-start;gap:10px;margin:20px 0 13px}.check input{flex:none;width:17px;height:17px;accent-color:var(--green)}details summary{cursor:pointer;font-weight:700}details p{margin-top:7px}button{cursor:pointer;width:100%;border:0;border-radius:12px;background:var(--lime);color:var(--ink);font-weight:800;padding:13px 16px;margin-top:17px}button span{float:right}button:hover{background:#d9ee60}button:disabled{opacity:.7;cursor:wait}button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid #267f61;outline-offset:3px}.secondary{background:#eef4e9}.secondary:hover{background:#e2eedf}#status{color:#963e2e;margin-top:10px;font-size:14px}#status:empty{display:none}#code{display:block;font:800 38px Manrope,sans-serif;letter-spacing:.16em;text-align:center;background:#edf5e8;border-radius:14px;padding:14px;margin-top:15px}.success{background:#edf5e8;padding:13px;border-radius:12px;margin-bottom:14px}#records{padding-left:20px}footer{border-top:1px solid var(--line);display:flex;gap:12px;justify-content:space-between;padding:20px 0;color:var(--muted);font-size:13px}footer span:first-child{font-weight:800}@media(max-width:900px){main{gap:28px}.top,main,footer{width:calc(100% - 48px)}.signup{padding:24px}}@media(max-width:680px){.top,main,footer{width:calc(100% - 32px)}.top{height:70px}.brand img{width:146px;height:auto}.top-link{font-size:13px}main{display:flex;flex-direction:column;padding:32px 0;gap:25px}.intro,.signup{width:100%}.visual{height:207px}.signup{border-radius:22px}h1{font-size:clamp(45px,10vw,64px)}}
+
+.step-label{color:var(--green);font-weight:700;font-size:13px;margin-bottom:9px}
+.profile-step h3{font:800 22px/1.2 Manrope,Arial,sans-serif;margin:0 0 16px;letter-spacing:-.035em}
+.profile-step .field{display:block;width:100%;min-width:0;padding:10px 11px;border:1px solid #a8b8ad;border-radius:10px;background:#fff;color:var(--ink);margin-bottom:13px;font:inherit}
+.measurements{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.profile-review{padding:12px 13px;margin-bottom:15px;background:#eef4e9;border-radius:12px;font-size:14px;color:var(--ink)}
+.profile-step label small{font-weight:400;color:var(--muted)}
+
+nav { display: flex; gap: 24px; align-items: center; }
+.nav-logout { width: auto; margin: 0; padding: 10px 22px; }
+.auth-form label { display: block; margin: 12px 0 6px; font-weight: 600; }
+.auth-form .check { display: flex; font-weight: 400; }
+.auth-form .field, .diary-heading .field {
+  display: block; width: 100%; padding: 11px 13px; border: 1px solid #a8b8ad;
+  border-radius: 10px; background: #fff; color: var(--ink); font: inherit;
+}
+.form-link { display: block; margin-top: 17px; font-weight: 600; text-underline-offset: 4px; }
+.verification-copy { color: var(--muted); margin-bottom: 20px; }
+.otp { text-align: center; font-size: 30px !important; letter-spacing: .3em; }
+.signed-in main { display: block; }
+.signed-in .intro { display: none; }
+.signed-in .signup { width: 100%; padding: 35px; }
+.account-heading, .diary-heading {
+  display: flex; justify-content: space-between; gap: 24px; align-items: center;
+}
+.account-heading h2 { margin: 9px 0; }
+.compact { width: auto; margin: 0; padding: 11px 20px; }
+#connection-state { margin: 24px 0; }
+.profile-data { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.profile-item { padding: 17px; background: #f2f5ed; border-radius: 14px; }
+.profile-item span, .profile-item strong { display: block; }
+.profile-item span { font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+.dashboard-title { margin: 32px 0 16px; font-size: 23px; }
+.daily-goals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 13px; }
+.metric { padding: 20px 15px; border: 1px solid var(--line); border-radius: 15px; }
+.metric h4 { margin: 0 0 12px; font-size: 14px; }
+.metric strong { display: block; font-size: 23px; color: #014214; margin-bottom: 12px; }
+.metric small { display: block; color: var(--muted); margin-top: 9px; font-size: 12px; }
+.metric progress { width: 100%; height: 10px; accent-color: #21653d; }
+.diary-heading { margin: 34px 0 18px; }
+.diary-heading label { max-width: 190px; font-size: 13px; color: var(--muted); }
+.diary-section { padding: 18px 22px; border: 1px solid var(--line); border-radius: 15px; margin-bottom: 13px; }
+.diary-section h4 { margin: 0 0 13px; }
+.diary-section ul { list-style: none; margin: 0; padding: 0; }
+.diary-section li { padding: 12px 0; border-top: 1px solid #e6ebe2; }
+.diary-section li small { display: block; color: var(--muted); margin-top: 4px; }
+@media (max-width: 850px) {
+  .daily-goals { grid-template-columns: repeat(3, 1fr); }
+  .profile-data { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  nav { gap: 13px; }
+  .signed-in .signup { padding: 20px 16px; }
+  .daily-goals { grid-template-columns: repeat(2, 1fr); }
+  .metric:last-child { grid-column: 1 / -1; }
+  .account-heading { align-items: start; gap: 10px; }
+  .account-heading h2 { font-size: 26px; }
+  .diary-heading { align-items: end; }
+  .diary-heading label { max-width: 153px; }
+}

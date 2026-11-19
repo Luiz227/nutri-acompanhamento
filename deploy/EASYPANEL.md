@@ -1,7 +1,8 @@
 # Publicar o servidor de teste no Easypanel
 
-O APK funciona no Android. O Easypanel hospeda o servidor de ligação com o n8n;
-não transforma a interface Flutter em uma versão web.
+O Easypanel hospeda o site e a API de ligação entre o aplicativo e o n8n.
+Para configurar telefone, senha e recuperação pelo WhatsApp, siga
+[Site e contas web no Easypanel](WEB-EASYPANEL.md).
 
 1. Crie um projeto separado, como `nutri-teste`, e um serviço App `nutri-api`.
 2. Fonte GitHub: `luiz227/nutri-acompanhamento`, branch `main`, Build Path `/`.

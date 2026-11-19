@@ -22,6 +22,8 @@ from menu_coach import MenuCoach, MENU_READY
 from patient_profile import validate_profile, profile_context
 from daily_progress import achieved_goals, progress_card
 from meal_pdf import eligible, make_pdf, MENU_REQUEST_TEXT
+from web_accounts import WebAccounts, AuthError
+from web_http import serve_static, handle_web, SECURITY
 
 PILOT_REPLY = 'Recebi sua mensagem. Nesta versão de teste posso ajudar com o diário alimentar: registre os alimentos e os pesos em gramas no aplicativo. Para mudar seu plano ou tratar dúvidas de saúde, converse com seu nutricionista. Para interromper as mensagens, envie SAIR.'
 
@@ -74,6 +76,7 @@ class Store:
         self.coaching = Coaching(self.db)
         self.messaging = Messaging(self)
         self.menu = MenuCoach(self.db)
+        self.web = WebAccounts(self)
 
     def enroll(self, body):
         phone = re.sub(r'[\s()+.-]', '', str(body.get('phone', '')))
@@ -185,7 +188,12 @@ class Store:
                 (event.get('userId'), event_id)).fetchone()
             if not p or p['phone'] != event.get('phone') or not p['consent']:
                 return {'action': 'ignore'}
-            action, text, optout = 'welcome', '', False
+            if p['verified']:
+                action, optout = 'reply', False
+                text = ('Sua conta no site da GarfoFala está conectada. Pode continuar seu acompanhamento por aqui.'
+                        if self.coaching.get(p['id']) else self.coaching.start(p['id']))
+            else:
+                action, text, optout = 'welcome', '', False
         elif event.get('kind') == 'incoming' and event.get('instance') == instance:
             phone, text = event.get('phone', ''), str(event.get('text', '')).strip()
             if not re.fullmatch(r'55\d{10,11}', phone) or len(text) > 16000:
@@ -209,7 +217,10 @@ class Store:
                     self.db.execute('UPDATE patients SET consent=0, verified=0,code_hash=NULL WHERE phone=? AND id<>?', (phone, p['id']))
                     self.db.execute('UPDATE patients SET verified=1,code_hash=NULL WHERE id=?', (p['id'],))
                     p = self.db.execute('SELECT * FROM patients WHERE id=?', (p['id'],)).fetchone()
-                    action, text, optout = 'reply', self.coaching.start(p['id']), False
+                    p = self.web.link_installation(p)
+                    action, optout = 'reply', False
+                    text = ('WhatsApp confirmado! Seu acompanhamento continua conectado ao histórico da sua conta.'
+                            if self.coaching.get(p['id']) else self.coaching.start(p['id']))
                 else:
                     p = self.db.execute('SELECT * FROM patients WHERE phone=? AND verified=1 AND consent=1', (phone,)).fetchone()
                     if not p:
@@ -415,6 +426,7 @@ class Store:
 
     def cleanup(self):
         with self.lock, self.db:
+            self.web.cleanup()
             self.db.execute("DELETE FROM daily_goal_notices WHERE day < date('now','-30 days')")
             self.db.execute('DELETE FROM history WHERE created<?', (time.time() - 30 * 86400,))
             self.db.execute('DELETE FROM inbox WHERE created<?', (time.time() - 30 * 86400,))
@@ -431,13 +443,16 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
         def log_message(self, *_):
             pass  # No health payload, token, phone or query string logging.
 
-        def reply(self, status, data):
+        def reply(self, status, data, headers=None):
             content = json.dumps(data, ensure_ascii=False).encode()
             self.send_response(status)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Content-Length', str(len(content)))
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
+            for key, value in {**SECURITY, **(headers or {})}.items():
+                if key not in ('X-Content-Type-Options', 'Cache-Control'):
+                    self.send_header(key, value)
             self.end_headers()
             self.wfile.write(content)
 
@@ -457,8 +472,10 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 22, 'n8nConfigured': n8n_configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
-                if path == '/' and self.command == 'GET':
+                    return self.reply(200, {'ok': True, 'apiVersion': 23, 'n8nConfigured': n8n_configured, 'webAuthConfigured': store.web.configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                if serve_static(self, path):
+                    return
+                if path == '/api/info' and self.command == 'GET':
                     return self.reply(200, {'name': 'Nutri Acompanhamento - API de teste', 'source': 'https://github.com/luiz227/nutri-acompanhamento', 'license': 'GPL-3.0'})
                 body = {}
                 if self.command in ('POST', 'PUT'):
@@ -470,6 +487,8 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
                     if not isinstance(body, dict):
                         raise Problem(400, 'JSON inválido.')
                 token = self.headers.get('Authorization', '').removeprefix('Bearer ')
+                if handle_web(self, store, path, body):
+                    return
                 if path.startswith('/v1/nutri/'):
                     if not service_token or not hmac.compare_digest(token, service_token):
                         raise Problem(401, 'Credencial de serviço inválida.')
@@ -515,7 +534,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
                 else:
                     raise Problem(404, 'Rota não encontrada.')
                 self.reply(200, data)
-            except Problem as error:
+            except (Problem, AuthError) as error:
                 self.reply(error.status, {'error': error.message})
             except (ValueError, TypeError, KeyError):
                 self.reply(400, {'error': 'Dados inválidos.'})
@@ -544,6 +563,14 @@ if __name__ == '__main__':
             store.cleanup()
             time.sleep(5)
     threading.Thread(target=worker, daemon=True).start()
+    def web_worker():
+        while True:
+            try:
+                store.web.deliver_once()
+            except Exception:
+                print('Falha temporária no envio de código web.', flush=True)
+            time.sleep(1)
+    threading.Thread(target=web_worker, daemon=True).start()
     print('Nutri API iniciada; modo de teste; sem logs de dados pessoais.', flush=True)
     make_server(store, service_token, os.environ.get('EVOLUTION_INSTANCE', 'nutri'),
                 int(os.environ.get('PORT', '8080')), bool(webhook)).serve_forever()

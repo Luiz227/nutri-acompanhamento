@@ -54,3 +54,5 @@ A distribuição GarfoFala 0.12 acrescenta a identidade visual da GarfoFala, avi
 GarfoFala 0.14 adiciona bases de composição complementares do USDA FoodData Central e CoFID. Os créditos e as licenças das bases estão em assets/data/FOOD-COMPOSITION-NOTICE.txt.
 
 GarfoFala 0.19 adapta o formato semanal do PDF de referência fornecido pelo responsável pelo projeto. A capa e os diagramas em assets/data/menu-cover-fruit.jpg e menu-wheel-*.jpg derivam das ilustrações desse documento, identificado como material de Allini Perissini. Os direitos dessas ilustrações permanecem com seus respectivos titulares. A licença GPL do código não amplia os direitos sobre esse material gráfico. Os dados e cardápios do documento de referência não são incorporados ao gerador.
+
+GarfoFala 0.22 acrescenta o site hospedado com a API, contas web vinculadas ao diário existente e recuperação de senha pelo WhatsApp. O armazenamento das senhas usa argon2-cffi 25.1.0, sob licença MIT, com os avisos preservados na dependência instalada. A senha da conta web é independente da autenticação do aplicativo.

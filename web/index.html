@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Seu diário alimentar pelo WhatsApp. Registre suas refeições, ajuste por mensagem e acompanhe sua evolução.">
+<title>GarfoFala | Sua conta</title>
+<link rel="icon" href="/garfofala-logo.png">
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" type="module"></script>
+</head>
+<body>
+<header class="top"><a class="brand" href="/" aria-label="GarfoFala, início"><img src="/garfofala-logo.png" alt="" width="220" height="73"></a><nav id="public-nav"><a class="top-link" href="#entrar">Entrar</a><a class="top-link" href="#cadastro">Criar conta ↗</a></nav><button id="logout-top" class="nav-logout" type="button" hidden>Sair da conta</button></header>
+<main>
+<section class="intro" aria-labelledby="titulo">
+<div class="eyebrow">SEU DIÁRIO ALIMENTAR COM IA NO WHATSAPP</div>
+<h1 id="titulo">Sua rotina, <em>prato por prato.</em></h1>
+<p>Envie uma foto, um áudio ou uma mensagem. A GarfoFala organiza suas refeições e ajuda você a acompanhar a alimentação no dia a dia.</p>
+<div class="visual"><img class="food" src="/prato.webp" alt="Prato com arroz, feijão, frango grelhado e legumes"><div class="bubble"><div class="bubble-label"><span></span> EXEMPLO DE CONVERSA</div><p>“Comi só metade do arroz.”</p><small>Porção atualizada no diário.</small></div></div>
+</section>
+<section id="cadastro" class="signup" aria-labelledby="form-title">
+<div class="badge"><span></span> CADASTRO GRATUITO</div>
+<h2 id="form-title">Comece por aqui</h2>
+<p class="lead">Preencha seu perfil e conecte o WhatsApp para começar.</p>
+<form id="enroll" class="auth-form">
+<p id="step-label" class="step-label" aria-live="polite">Etapa 1 de 3</p>
+<section class="profile-step">
+<h3 tabindex="-1">Sobre você</h3>
+<label for="birthday">Data de nascimento</label>
+<input class="field" id="birthday" type="date" autocomplete="bday" required>
+<label for="gender">Gênero</label>
+<select class="field" id="gender" required><option value="">Selecione</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="nonBinary">Não binário</option></select>
+<div id="calorie-reference" hidden><label for="caloriesProfile">Referência para a estimativa</label>
+<select class="field" id="caloriesProfile"><option value="averaged">Média das referências</option><option value="estrogenTypical">Referência estrogênica</option><option value="testosteroneTypical">Referência testosterônica</option></select></div>
+<div class="measurements">
+<div><label for="heightCm">Altura (cm)</label><input class="field" id="heightCm" type="number" inputmode="numeric" min="30" max="300" step="1" placeholder="170" required></div>
+<div><label for="weightKg">Peso atual (kg)</label><input class="field" id="weightKg" inputmode="decimal" pattern="[0-9]+([.,][0-9])?" placeholder="70,0" required></div>
+</div>
+<button type="button" data-next>Continuar <span aria-hidden="true">↗</span></button>
+</section>
+<section class="profile-step" hidden>
+<h3 tabindex="-1">Rotina e objetivo</h3>
+<label for="activityLevel">Nível de atividade física</label>
+<select class="field" id="activityLevel" required><option value="">Selecione</option><option value="sedentary">Sedentário</option><option value="lowActive">Pouco ativo</option><option value="active">Ativo</option><option value="veryActive">Muito ativo</option></select>
+<label for="goal">Qual é seu objetivo?</label>
+<select class="field" id="goal" required><option value="">Selecione</option><option value="loseWeight">Perder peso</option><option value="maintainWeight">Manter peso</option><option value="gainWeight">Ganhar peso</option></select>
+<div id="target-group" hidden><label for="targetWeightKg">Peso desejado (kg) <small>opcional</small></label>
+<input class="field" id="targetWeightKg" inputmode="decimal" pattern="[0-9]+([.,][0-9])?" placeholder="65,0"></div>
+<button type="button" data-next>Continuar <span aria-hidden="true">↗</span></button>
+<button type="button" class="secondary" data-back>Voltar</button>
+</section>
+<section class="profile-step" hidden>
+<h3 tabindex="-1">Confirme seu cadastro</h3>
+<p id="profile-review" class="profile-review"></p>
+<label for="phone">Seu WhatsApp</label>
+<div class="number"><span>+55</span><input id="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="(11) 99999-9999" required maxlength="22" aria-describedby="phone-help"></div>
+<small class="help" id="phone-help">Informe o DDD e o número do celular.</small>
+<label for="signup-password">Crie sua senha</label>
+<input class="field" id="signup-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="password-help">
+<small class="help" id="password-help">Use pelo menos 12 caracteres e um caractere especial, como !, @ ou #.</small>
+<label for="signup-password-confirm">Confirme sua senha</label>
+<input class="field" id="signup-password-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+<label class="check"><input id="consent" type="checkbox" required><span>Autorizo a GarfoFala a usar meu perfil, meu número e os registros que eu enviar para acompanhar minha alimentação pelo WhatsApp.</span></label>
+<details><summary>Como meus dados serão usados?</summary><p>O número é usado para confirmar a conexão e enviar mensagens do acompanhamento. Seu perfil e os registros ficam vinculados ao cadastro e ajudam a contextualizar seu acompanhamento. A senha protege seu acesso ao site. A confirmação do número vincula sua conta ao acompanhamento. Você pode interromper as mensagens enviando <strong>SAIR</strong> no WhatsApp.</p><p>Se você já usa o aplicativo, confirme o mesmo número para acessar o histórico vinculado a ele.</p></details>
+<button type="submit">Criar minha conta <span aria-hidden="true">↗</span></button>
+<button type="button" class="secondary" data-back>Voltar</button>
+</section>
+</form>
+
+<form id="login" class="auth-form" hidden>
+<label for="login-phone">Seu WhatsApp com DDD</label>
+<input class="field" id="login-phone" type="tel" autocomplete="username" required placeholder="(11) 99999-9999">
+<label for="login-password">Sua senha</label>
+<input class="field" id="login-password" type="password" autocomplete="current-password" maxlength="128" required>
+<button type="submit">Entrar na minha conta ↗</button>
+<a class="form-link" href="#recuperar">Esqueci minha senha</a>
+<a class="form-link" href="#cadastro">Ainda não tenho conta</a>
+</form>
+<form id="forgot" class="auth-form" hidden>
+<label for="forgot-phone">Seu WhatsApp com DDD</label>
+<input class="field" id="forgot-phone" type="tel" autocomplete="tel-national" required placeholder="(11) 99999-9999">
+<button type="submit">Receber código pelo WhatsApp ↗</button>
+<a class="form-link" href="#entrar">Voltar para entrar</a>
+</form>
+<form id="verify" class="auth-form" hidden>
+<p class="verification-copy">Digite o código enviado ao seu WhatsApp. Ele é válido por 10 minutos.</p>
+<label for="otp-code">Código de confirmação</label>
+<input class="field otp" id="otp-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<div id="reset-fields" hidden>
+<label for="new-password">Nova senha</label>
+<input class="field" id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128">
+<small class="help">Pelo menos 12 caracteres e um caractere especial.</small>
+<label for="new-password-confirm">Confirme a nova senha</label>
+<input class="field" id="new-password-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128">
+</div>
+<button type="submit" id="verify-submit">Confirmar código ↗</button>
+<button type="button" id="resend-code" class="secondary">Reenviar código</button>
+<a class="form-link" href="#entrar">Voltar para entrar</a>
+</form>
+<div id="dashboard" hidden>
+<div class="account-heading"><div><p class="eyebrow" id="account-date"></p><h2 id="account-name">Seu acompanhamento</h2><p id="account-phone" class="help"></p></div><button id="refresh" class="secondary compact" type="button">Atualizar</button></div>
+<p id="connection-state" class="success"></p>
+<div id="profile-data" class="profile-data"></div>
+<h3 class="dashboard-title">Seu progresso de hoje</h3>
+<div id="daily-goals" class="daily-goals"></div>
+<div class="diary-heading"><h3>Seu diário</h3><label for="diary-date">Data<input class="field" id="diary-date" type="date"></label></div>
+<div id="diary-records" class="diary-records"></div>
+<p class="help">Envie suas refeições e registros pelo WhatsApp. Eles aparecem aqui e no aplicativo.</p>
+</div>
+<p id="status" role="status" aria-live="polite"></p>
+</section>
+</main>
+<footer><span>GarfoFala</span><span>Estimativas nutricionais para o seu diário alimentar.</span></footer>
+</body>
+</html>
