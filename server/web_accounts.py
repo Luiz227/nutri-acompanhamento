@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, InvalidHashError
@@ -291,8 +292,14 @@ class WebAccounts:
             with urlopen(request, timeout=20) as response:
                 data = json.loads(response.read(100000))
                 success = 200 <= response.status < 300 and bool(data.get('key', {}).get('id'))
-        except Exception:
-            pass
+            print('WEB_OTP: aceito pela Evolution.' if success else
+                  'WEB_OTP: Evolution respondeu sem confirmar o envio.', flush=True)
+        except HTTPError as error:
+            print(f'WEB_OTP: Evolution recusou o envio (HTTP {error.code}).', flush=True)
+        except (URLError, TimeoutError):
+            print('WEB_OTP: falha de conexão com a Evolution. Confira endereço, DNS e HTTPS.', flush=True)
+        except Exception as error:
+            print(f'WEB_OTP: falha ao preparar ou interpretar o envio ({type(error).__name__}).', flush=True)
         with self.store.lock, self.db:
             self.db.execute('UPDATE web_challenges SET delivery=?,next_at=? WHERE id=?',
                             ('sent' if success else 'pending', time.time()+30, row['id']))

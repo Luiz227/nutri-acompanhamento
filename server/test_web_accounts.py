@@ -151,6 +151,19 @@ class WebAccountTests(unittest.TestCase):
         self.store = Store(self.temp.name + '/db.sqlite3')
         self.assertEqual(self.store.web.patient(session)['id'], owner)
 
+    def test_delivery_error_reports_status_without_secrets(self):
+        body, _, _ = self.signup()
+        self.store.db.execute('DELETE FROM web_auth_attempts')
+        self.store.web.base_url = 'https://evolution.example'
+        self.store.web.api_key = 'private-fixture-key'
+        challenge = self.store.web.start('reset', {'phone': body['phone']})
+        with patch('web_accounts.urlopen', side_effect=HTTPError('https://evolution.example', 401, 'Unauthorized', {}, None)), patch('builtins.print') as log:
+            self.store.web.deliver_once()
+        message = log.call_args.args[0]
+        self.assertIn('HTTP 401', message)
+        for secret in (body['phone'], body['password'], self.store.web.api_key, self.store.web.code(challenge['challengeId'])):
+            self.assertNotIn(secret, message)
+
     def test_http_cookie_origin_and_static_isolation(self):
         body, _, _ = self.signup()
         server = make_server(self.store, 'service-test-token', port=0)
