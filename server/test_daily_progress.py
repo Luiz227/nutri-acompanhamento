@@ -44,7 +44,7 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(image['mediaType'], 'image')
         with Image.open(BytesIO(base64.b64decode(image['media']))) as png:
             self.assertEqual(png.format, 'PNG')
-            self.assertEqual(png.size, (720, 930))
+            self.assertEqual(png.size, (1080, 1350))
         self.assertFalse(self.store.messaging.authorize(parts[-1], 'nutri')['approved'])
 
     def test_explicit_last_meal_before_dinner(self):

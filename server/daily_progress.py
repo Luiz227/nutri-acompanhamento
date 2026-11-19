@@ -107,52 +107,129 @@ def water_goal_reached(db, patient_id, day):
 def render_card(day, totals, goals, missing, estimated):
     from PIL import Image, ImageDraw, ImageFont
     from reportlab import __file__ as reportlab_file
+    from math import isfinite
 
     font_dir = Path(reportlab_file).parent / 'fonts'
     def font(size, bold=False):
         return ImageFont.truetype(str(font_dir / ('VeraBd.ttf' if bold else 'Vera.ttf')), size)
-    def number(value):
-        return f'{value:,.0f}'.replace(',', '.')
 
-    image = Image.new('RGB', (720, 930), '#F6F5F0')
+    def number(value, decimals=0):
+        return f'{value:,.{decimals}f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+
+    def fitted(value, size, width, bold=False):
+        selected = font(size, bold)
+        while draw.textlength(value, font=selected) > width and size > 18:
+            size -= 1
+            selected = font(size, bold)
+        return selected
+
+    def target(key):
+        value = goals.get(key)
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value) and value > 0 else None
+
+    def progress(left, top, width, value, goal, background, fill):
+        draw.rounded_rectangle((left, top, left+width, top+12), radius=6, fill=background)
+        length = min(width, max(0, round(width*min(value/goal, 1))))
+        if length:
+            draw.rounded_rectangle((left, top, left+length, top+12), radius=6, fill=fill)
+
+    image = Image.new('RGB', (1080, 1350), '#F6F8F2')
     draw = ImageDraw.Draw(image)
-    green, ink, muted = '#16453A', '#173C33', '#49635A'
-    draw.rectangle((0, 0, 720, 220), fill=green)
+    green, lime, ink, muted = '#014214', '#CFE724', '#143D24', '#52664F'
+    draw.rounded_rectangle((0, -55, 1080, 588), radius=48, fill=green)
+
     logo = Path(__file__).resolve().parent.parent / 'assets/icon/garfofala-symbol.png'
     if not logo.exists():
         logo = Path(__file__).with_name('garfofala-symbol.png')
     if logo.exists():
         with Image.open(logo) as source:
-            icon = source.convert('RGBA').resize((54, 54), Image.Resampling.LANCZOS)
-            image.paste(icon, (619, 27), icon)
-    draw.text((48, 42), 'GARFOFALA', font=font(20, True), fill='#D5EF77')
-    draw.text((46, 91), 'Seu progresso de hoje', font=font(43, True), fill='white')
-    draw.text((48, 160), day.strftime('%d/%m/%Y') + '  •  Diário alimentar', font=font(23), fill='#D0E8DC')
+            icon = source.convert('RGBA').resize((76, 76), Image.Resampling.LANCZOS)
+            image.paste(icon, (54, 43), icon)
+    draw.text((146, 66), 'GARFOFALA', font=font(25, True), fill=lime)
+    months = ('JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ')
+    date = f'{day.day:02d} {months[day.month-1]} {day.year}'
+    draw.rounded_rectangle((793, 53, 1018, 105), radius=26, fill='#19562B')
+    draw.text((905, 68), date, anchor='ma', font=font(20, True), fill='#EAF3D9')
+    draw.text((59, 155), 'Seu progresso do dia', font=font(59, True), fill='white')
 
-    for index, (key, label, unit) in enumerate(METRICS):
-        y = 250 + index * 111
-        draw.rounded_rectangle((42, y, 678, y + 98), radius=18, fill='white')
-        draw.text((63, y + 13), label, font=font(22, True), fill=ink)
-        goal = goals.get(key)
-        value = totals[key]
-        display = f'{number(value)} {unit}'+ ('*' if key in missing else '')
-        if key in missing and value == 0:
-            display = 'Sem cálculo*'
-        draw.text((653, y + 13), display, font=font(24, True), fill=green, anchor='ra')
-        if goal and goal > 0:
-            draw.rounded_rectangle((63, y + 50, 653, y + 60), radius=5, fill='#E2EBE6')
-            length = round(590 * min(value / goal, 1))
-            if length:
-                draw.rounded_rectangle((63, y + 50, 63 + length, y + 60), radius=5, fill='#5C8A41')
-            draw.text((63, y + 70), f'Meta do app: {number(goal)} {unit}', font=font(16), fill=muted)
+    energy = totals.get('energyKcal', 0)
+    energy_goal = target('energyKcal')
+    energy_missing = 'energyKcal' in missing
+    draw.text((63, 282), 'ENERGIA REGISTRADA', font=font(20, True), fill='#C5D9C6')
+    display = 'Sem cálculo' if energy_missing and energy == 0 else number(energy)+('*' if energy_missing else '')
+    draw.text((56, 327), display, font=fitted(display, 100, 580, True), fill='white')
+    if not (energy_missing and energy == 0):
+        draw.text((65, 448), 'kcal', font=font(29), fill=lime)
+    energy_caption = f'Meta do aplicativo: {number(energy_goal)} kcal' if energy_goal else 'Meta de energia ainda não definida'
+    draw.text((64, 520), energy_caption, font=fitted(energy_caption, 23, 615), fill='#D6E5CD')
+
+    # The arc shows the share of the app goal, capped visually at one turn.
+    ring = (731, 281, 1007, 557)
+    draw.arc(ring, 0, 360, fill='#286237', width=22)
+    if energy_goal:
+        percent = energy/energy_goal*100
+        if percent > 0:
+            draw.arc(ring, -90, -90+min(percent, 100)*3.6, fill=lime, width=22)
+        percent_text = number(percent)+'%'
+        draw.text((869, 378), percent_text, anchor='ma',
+                  font=fitted(percent_text, 48, 205, True), fill='white')
+        draw.text((869, 443), 'da meta'+('*' if energy_missing else ''),
+                  anchor='ma', font=font(20), fill='#D6E5CD')
+    else:
+        draw.text((869, 382), 'Meta', anchor='ma', font=font(32, True), fill='white')
+        draw.text((869, 432), 'não definida', anchor='ma', font=font(18), fill='#D6E5CD')
+
+    draw.text((61, 630), 'Seus nutrientes', font=font(29, True), fill=ink)
+    for index, (key, label, unit) in enumerate(METRICS[1:4]):
+        x = 60 + index*326
+        top, width = 688, 308
+        draw.rounded_rectangle((x, top+5, x+width, 909), radius=26, fill='#E8EDE1')
+        draw.rounded_rectangle((x, top, x+width, 904), radius=26, fill='white')
+        draw.text((x+23, top+22), label, font=font(24, True), fill=ink)
+        value, goal = totals.get(key, 0), target(key)
+        display = ('—' if key in missing and value == 0 else
+                   number(value, 1).removesuffix(',0')+' g'+('*' if key in missing else ''))
+        draw.text((x+22, top+67), display, font=fitted(display, 49, width-44, True), fill=green)
+        if goal:
+            progress(x+24, top+142, width-48, value, goal, '#E6EEDF', green)
+            caption = 'Meta '+number(goal, 1).removesuffix(',0')+' g'
         else:
-            draw.text((63, y + 58), 'Meta não definida no app', font=font(16), fill=muted)
+            caption = 'Meta não definida'
+        if key in missing and value == 0:
+            caption = 'Sem cálculo completo'
+        draw.text((x+24, top+173), caption, font=fitted(caption, 18, width-48), fill=muted)
 
-    draw.text((47, 826), 'Dados do dia disponíveis no acompanhamento.', font=font(19), fill=muted)
+    water, water_goal = totals.get('waterMl', 0), target('waterMl')
+    top = 948
+    draw.rounded_rectangle((60, top, 1020, 1178), radius=30, fill='#E7F0DB')
+    draw.text((88, top+27), 'Água ao longo do dia', font=font(28, True), fill=ink)
+    water_text = (number(water/1000, 1).removesuffix(',0')+' L' if water >= 1000 else number(water)+' ml')
+    draw.text((85, top+80), water_text, font=font(59, True), fill=green)
+    if water_goal:
+        if water >= water_goal:
+            caption = 'Meta de água atingida'
+        else:
+            caption = number(max(0, water_goal-water))+' ml para sua meta'
+        draw.text((987, top+109), caption, anchor='ra',
+                  font=fitted(caption, 22, 470, True), fill=green)
+        progress(89, top+171, 902, water, water_goal, '#C9DABD', green)
+        draw.text((88, top+198), 'Meta do aplicativo: '+number(water_goal)+' ml',
+                  font=font(17), fill=muted)
+    else:
+        draw.text((88, top+171), 'Meta de água ainda não definida no aplicativo',
+                  font=font(21), fill=muted)
+
+    note_top = 1232
     if missing:
-        draw.text((47, 854), '* Alguns alimentos ficaram sem cálculo nutricional.', font=font(17), fill=muted)
+        draw.text((62, note_top), '* Totais parciais: há alimentos sem cálculo completo.',
+                  font=font(20), fill=muted)
+        note_top += 34
     if estimated:
-        draw.text((47, 882), 'Inclui estimativas de porções ou alimentos.', font=font(17), fill=muted)
+        draw.text((62, note_top), 'Inclui estimativas de porções ou alimentos.',
+                  font=font(20), fill=muted)
+    elif not missing:
+        draw.text((62, note_top), 'Calculado a partir dos seus registros de hoje.',
+                  font=font(20), fill=muted)
     output = BytesIO()
     image.save(output, format='PNG', optimize=True)
     return output.getvalue()
