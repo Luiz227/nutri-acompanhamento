@@ -231,7 +231,7 @@ class Store:
                     before_coaching = self.coaching.get(p['id'])
                     correction = self.records.correct_meal(p['id'], text) if not event.get('_photoSources') else None
                     coaching_reply = correction or self.coaching.handle(p['id'], text) if text.upper() not in ('CONFIRMAR', 'CANCELAR REGISTRO') else None
-                    if not correction and coaching_reply and before_coaching and before_coaching['stage'] == 'reminders' and self.coaching.get(p['id'])['stage'] == 'done':
+                    if not correction and coaching_reply and before_coaching and before_coaching['stage'] in ('reminders','reminder_count','reminder_hours','reminder_confirm','hours') and self.coaching.get(p['id'])['stage'] == 'done':
                         invitation = self.menu.offer(p['id'])
                         if invitation:
                             coaching_reply += '\n\n' + invitation
@@ -472,7 +472,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 25, 'n8nConfigured': n8n_configured, 'webAuthConfigured': store.web.configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 26, 'n8nConfigured': n8n_configured, 'webAuthConfigured': store.web.configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if serve_static(self, path):
                     return
                 if path == '/api/info' and self.command == 'GET':
