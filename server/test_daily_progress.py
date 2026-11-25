@@ -6,6 +6,27 @@ from unittest.mock import patch
 from PIL import Image
 import test_app as fixtures
 from daily_progress import render_card
+from daily_progress import energy_balance
+from datetime import date
+
+
+class EnergyBalanceTests(unittest.TestCase):
+    def test_maintenance_is_independent_of_calorie_goal(self):
+        profile = dict(birthday='1990-04-10',weightKg=79,heightCm=170,gender='male',activityLevel='active',
+                       goal='loseWeight',dailyGoals={'energyKcal':1800})
+        result = energy_balance(date(2026,11,25), {'energyKcal':1800},profile,set())
+        expected = 864-9.72*36+1.27*(14.2*79+503*1.7)
+        self.assertAlmostEqual(result['expenditureKcal'],expected)
+        self.assertAlmostEqual(result['balanceKcal'],expected-1800)
+        profile['dailyGoals']['energyKcal']=3000
+        self.assertEqual(result,energy_balance(date(2026,11,25), {'energyKcal':1800},profile,set()))
+        self.assertLess(energy_balance(date(2026,11,25), {'energyKcal':5000},profile,set())['balanceKcal'],0)
+
+    def test_missing_profile_minor_or_partial_foods_never_fabricate_deficit(self):
+        profile = dict(birthday='1990-04-10',weightKg=79,heightCm=170,gender='female',activityLevel='active')
+        self.assertIsNone(energy_balance(date(2026,11,25),{'energyKcal':1500},{'dailyGoals':{'energyKcal':2000}},set()))
+        self.assertIsNone(energy_balance(date(2026,11,25),{'energyKcal':1500},{**profile,'birthday':'2010-01-01'},set()))
+        self.assertIsNone(energy_balance(date(2026,11,25),{'energyKcal':1500},profile,{'energyKcal'})['balanceKcal'])
 
 
 class ProgressTests(unittest.TestCase):
@@ -44,7 +65,7 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(image['mediaType'], 'image')
         with Image.open(BytesIO(base64.b64decode(image['media']))) as png:
             self.assertEqual(png.format, 'PNG')
-            self.assertEqual(png.size, (1080, 1350))
+            self.assertEqual(png.size, (1080, 1525))
         self.assertFalse(self.store.messaging.authorize(parts[-1], 'nutri')['approved'])
 
     def test_explicit_last_meal_before_dinner(self):

@@ -28,7 +28,35 @@ def progress_card(db, patient_id, event_id, message, profile, now=None):
     if not closes_day:
         return None
     totals, missing, estimated = summarize(record for _, record in rows)
-    return render_card(today, totals, profile.get('dailyGoals', {}), missing, estimated)
+    return render_card(today, totals, profile.get('dailyGoals', {}), missing, estimated, profile=profile)
+
+
+def energy_balance(day, totals, profile, missing):
+    """Estimate maintenance with the app's IOM 2005 equation, never from a diet goal."""
+    from datetime import date
+    from math import isfinite
+    factors = {'sedentary': (1, 1), 'lowActive': (1.12, 1.14),
+               'active': (1.27, 1.27), 'veryActive': (1.54, 1.45)}
+    try:
+        birthday = date.fromisoformat(profile['birthday'])
+        age = day.year-birthday.year-((day.month, day.day) < (birthday.month, birthday.day))
+        weight, height = profile['weightKg'], profile['heightCm']
+        if not 19 <= age <= 129 or any(isinstance(v, bool) or not isinstance(v, (int,float)) or not isfinite(v) or v <= 0 for v in (weight,height)):
+            return None
+        male_factor, female_factor = factors[profile['activityLevel']]
+        male = 864 - 9.72*age + male_factor*(14.2*weight + 503*height/100)
+        female = 387 - 7.31*age + female_factor*(10.9*weight + 660.7*height/100)
+        gender = profile['gender']
+        if gender not in ('male', 'female', 'nonBinary'):
+            return None
+        expenditure = male if gender == 'male' else female if gender == 'female' else (male+female)/2
+        if expenditure <= 0:
+            return None
+        intake = totals.get('energyKcal')
+        delta = None if 'energyKcal' in missing or isinstance(intake,bool) or not isinstance(intake,(int,float)) or not isfinite(intake) else expenditure-intake
+        return {'expenditureKcal': expenditure, 'balanceKcal': delta}
+    except (KeyError, ValueError, TypeError):
+        return None
 
 
 def diary_rows(db, patient_id, day):
@@ -104,7 +132,7 @@ def water_goal_reached(db, patient_id, day):
                if record['kind'] == 'water') >= goal
 
 
-def render_card(day, totals, goals, missing, estimated):
+def render_card(day, totals, goals, missing, estimated, profile=None):
     from PIL import Image, ImageDraw, ImageFont
     from reportlab import __file__ as reportlab_file
     from math import isfinite
@@ -133,7 +161,7 @@ def render_card(day, totals, goals, missing, estimated):
         if length:
             draw.rounded_rectangle((left, top, left+length, top+12), radius=6, fill=fill)
 
-    image = Image.new('RGB', (1080, 1350), '#F6F8F2')
+    image = Image.new('RGB', (1080, 1525), '#F6F8F2')
     draw = ImageDraw.Draw(image)
     green, lime, ink, muted = '#014214', '#CFE724', '#143D24', '#52664F'
     draw.rounded_rectangle((0, -55, 1080, 588), radius=48, fill=green)
@@ -179,12 +207,28 @@ def render_card(day, totals, goals, missing, estimated):
         draw.text((869, 382), 'Meta', anchor='ma', font=font(32, True), fill='white')
         draw.text((869, 432), 'não definida', anchor='ma', font=font(18), fill='#D6E5CD')
 
-    draw.text((61, 630), 'Seus nutrientes', font=font(29, True), fill=ink)
+    balance = energy_balance(day, totals, profile or {}, missing)
+    draw.rounded_rectangle((60, 616, 1020, 766), radius=26, fill='#E7F0DB')
+    delta = balance['balanceKcal'] if balance else None
+    label = ('Déficit calórico estimado' if delta is not None and delta > .5 else
+             'Superávit calórico estimado' if delta is not None and delta < -.5 else
+             'Equilíbrio calórico estimado' if delta is not None else 'Saldo calórico estimado')
+    draw.text((86, 638), label, font=font(25, True), fill=ink)
+    if delta is not None:
+        draw.text((86, 683), number(abs(delta))+' kcal', font=font(42, True), fill=green)
+        caption = 'Gasto estimado: '+number(balance['expenditureKcal'])+' kcal'
+        draw.text((991, 691), caption, anchor='ra', font=fitted(caption, 20, 500), fill=ink)
+        draw.text((991, 724), 'Gasto do perfil menos consumo registrado.', anchor='ra', font=font(18), fill=muted)
+    else:
+        caption = 'Consumo incompleto: não é possível estimar o déficit.' if energy_missing else 'Complete nascimento, peso, altura e atividade no perfil.'
+        draw.text((86, 695), caption, font=fitted(caption, 23, 905), fill=muted)
+
+    draw.text((61, 805), 'Seus nutrientes', font=font(29, True), fill=ink)
     for index, (key, label, unit) in enumerate(METRICS[1:4]):
         x = 60 + index*326
-        top, width = 688, 308
-        draw.rounded_rectangle((x, top+5, x+width, 909), radius=26, fill='#E8EDE1')
-        draw.rounded_rectangle((x, top, x+width, 904), radius=26, fill='white')
+        top, width = 863, 308
+        draw.rounded_rectangle((x, top+5, x+width, 1084), radius=26, fill='#E8EDE1')
+        draw.rounded_rectangle((x, top, x+width, 1079), radius=26, fill='white')
         draw.text((x+23, top+22), label, font=font(24, True), fill=ink)
         value, goal = totals.get(key, 0), target(key)
         display = ('—' if key in missing and value == 0 else
@@ -200,8 +244,8 @@ def render_card(day, totals, goals, missing, estimated):
         draw.text((x+24, top+173), caption, font=fitted(caption, 18, width-48), fill=muted)
 
     water, water_goal = totals.get('waterMl', 0), target('waterMl')
-    top = 948
-    draw.rounded_rectangle((60, top, 1020, 1178), radius=30, fill='#E7F0DB')
+    top = 1123
+    draw.rounded_rectangle((60, top, 1020, 1353), radius=30, fill='#E7F0DB')
     draw.text((88, top+27), 'Água ao longo do dia', font=font(28, True), fill=ink)
     water_text = (number(water/1000, 1).removesuffix(',0')+' L' if water >= 1000 else number(water)+' ml')
     draw.text((85, top+80), water_text, font=font(59, True), fill=green)
@@ -219,7 +263,7 @@ def render_card(day, totals, goals, missing, estimated):
         draw.text((88, top+171), 'Meta de água ainda não definida no aplicativo',
                   font=font(21), fill=muted)
 
-    note_top = 1232
+    note_top = 1407
     if missing:
         draw.text((62, note_top), '* Totais parciais: há alimentos sem cálculo completo.',
                   font=font(20), fill=muted)

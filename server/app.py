@@ -472,7 +472,7 @@ def make_server(store, service_token, instance='nutri', port=8080, n8n_configure
             try:
                 path = self.path.split('?')[0]
                 if path == '/healthz' and self.command == 'GET':
-                    return self.reply(200, {'ok': True, 'apiVersion': 24, 'n8nConfigured': n8n_configured, 'webAuthConfigured': store.web.configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
+                    return self.reply(200, {'ok': True, 'apiVersion': 25, 'n8nConfigured': n8n_configured, 'webAuthConfigured': store.web.configured, 'mode': 'general-ai' if store.allow_ai else 'pilot-fixed-replies'})
                 if serve_static(self, path):
                     return
                 if path == '/api/info' and self.command == 'GET':

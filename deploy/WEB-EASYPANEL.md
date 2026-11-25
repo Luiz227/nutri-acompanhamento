@@ -20,7 +20,7 @@ PUBLIC_BASE_URL=https://testee-nutri-api.flgmd4.easypanel.host
 `PUBLIC_BASE_URL` deve ser exatamente a origem HTTPS usada para abrir o site, sem caminho adicional. Se adicionar um domínio próprio ao site, atualize essa variável para o novo endereço. A chave em `EVOLUTION_API_KEY` é a credencial usada para enviar mensagens pela Evolution. Ela fica somente no servidor.
 
 5. Clique em **Implantar**.
-6. Abra `/healthz`. Confira `apiVersion: 24` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
+6. Abra `/healthz`. Confira `apiVersion: 25` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
 7. Abra o domínio do serviço para acessar o site. O endereço informado no aplicativo e em `backendBaseUrl` do n8n continua atendendo as rotas de API.
 
 ## Cadastro, acesso e recuperação
@@ -42,6 +42,8 @@ O fluxo atual permanece responsável pela conversa, os registros, os PDFs e os l
 Não é necessário importar outro fluxo n8n para adicionar o login web. Preserve `N8N_REGISTRATION_WEBHOOK`, `N8N_APP_WEBHOOK_SECRET` e `NUTRI_SERVICE_TOKEN`.
 
 ## Painel web 0.23
+
+A imagem diária inclui o saldo calórico estimado usando a equação IOM 2005 do app (adultos a partir de 19 anos), peso/altura do perfil e nível de atividade, menos a energia registrada. A meta alimentar não é usada como gasto de manutenção. Valores positivos aparecem como déficit; negativos, como superávit. Perfis incompletos ou calorias parciais não recebem um déficit numérico. A estimativa depende do perfil e de todos os alimentos terem sido registrados; não mede o gasto real por sensores.
 
 - **Diário** com refeições por categoria e data, nutrientes, registro manual de água, peso, alimentos e observações, edição e exclusão. A busca usa o catálogo do servidor; o código de barras consulta o Open Food Facts. Os cálculos usam o mesmo resolvedor nutricional do WhatsApp.
 - **IMC** no resumo e na evolução, calculado com a última pesagem confirmada e a altura do perfil. Sem pesagens, usa o peso do perfil. Não cria pesagens históricas fictícias. A classificação adulta só aparece a partir dos 20 anos.
