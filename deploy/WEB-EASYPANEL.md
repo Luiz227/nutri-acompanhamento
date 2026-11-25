@@ -20,7 +20,7 @@ PUBLIC_BASE_URL=https://testee-nutri-api.flgmd4.easypanel.host
 `PUBLIC_BASE_URL` deve ser exatamente a origem HTTPS usada para abrir o site, sem caminho adicional. Se adicionar um domínio próprio ao site, atualize essa variável para o novo endereço. A chave em `EVOLUTION_API_KEY` é a credencial usada para enviar mensagens pela Evolution. Ela fica somente no servidor.
 
 5. Clique em **Implantar**.
-6. Abra `/healthz`. Confira `apiVersion: 26` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
+6. Abra `/healthz`. Confira `apiVersion: 27` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
 7. Abra o domínio do serviço para acessar o site. O endereço informado no aplicativo e em `backendBaseUrl` do n8n continua atendendo as rotas de API.
 
 ## Cadastro, acesso e recuperação
@@ -36,6 +36,8 @@ PUBLIC_BASE_URL=https://testee-nutri-api.flgmd4.easypanel.host
 Senhas usam Argon2id com salt individual. O banco guarda hashes das sessões e autentica os códigos com HMAC. Os códigos são produzidos pela API, enviados diretamente pela Evolution e não dependem da geração de texto da IA. Nenhuma senha é enviada ao WhatsApp.
 
 ## n8n
+
+O servidor agenda lembretes de registro de refeições às 08:00 (café da manhã), 12:00 (almoço) e 20:00 (jantar), no horário de Brasília, para contas verificadas, com acompanhamento autorizado e apresentação inicial concluída. Os eventos usam o mesmo caminho autenticado `kind: reminder` do fluxo atual. Não é necessário importar outro fluxo. A categoria já registrada no dia suprime o lembrete, inclusive se o registro chegar enquanto o envio aguarda na fila. O horário não é repetido após reinício nem recuperado após mais de cinco minutos de atraso. `PARAR LEMBRETES DE REFEIÇÕES` e `ATIVAR LEMBRETES DE REFEIÇÕES` controlam esses avisos. `PARAR LEMBRETES` para água e refeições; `SAIR` interrompe todo o acompanhamento.
 
 No WhatsApp, a configuração dos lembretes pergunta primeiro se a pessoa deseja recebê-los, depois quantas vezes por dia (de 1 a 6) e quais horários prefere. O envio só é ativado após receber horários válidos, distintos e na quantidade escolhida. Horários como `9h, 14:30 e 18h` são aceitos. Para rever as escolhas, envie `ALTERAR LEMBRETES`; para parar só os lembretes, `PARAR LEMBRETES`. Configurações já autorizadas são preservadas na implantação.
 

@@ -24,6 +24,12 @@ class Coaching:
           slot TEXT NOT NULL, created REAL NOT NULL, UNIQUE(patient_id,slot));''')
         if 'reminder_count' not in {row['name'] for row in db.execute('PRAGMA table_info(coaching)')}:
             db.execute('ALTER TABLE coaching ADD COLUMN reminder_count INTEGER')
+        if 'meal_reminders' not in {row['name'] for row in db.execute('PRAGMA table_info(coaching)')}:
+            db.execute('ALTER TABLE coaching ADD COLUMN meal_reminders INTEGER NOT NULL DEFAULT 1')
+        db.execute('''CREATE TABLE IF NOT EXISTS meal_reminder_slots (
+            event_id TEXT PRIMARY KEY, patient_id TEXT NOT NULL REFERENCES patients(id),
+            meal_type TEXT NOT NULL, slot TEXT NOT NULL, created REAL NOT NULL,
+            UNIQUE(patient_id,meal_type,slot))''')
 
     def get(self, patient_id):
         row = self.db.execute('SELECT * FROM coaching WHERE patient_id=?', (patient_id,)).fetchone()
@@ -39,9 +45,17 @@ class Coaching:
             self.start(patient_id)
             return 'Antes de começarmos: como você gostaria de ser chamado(a)? Pode responder PULAR.'
         command = plain(text).rstrip('.!?').strip()
+        if command in ('parar lembretes de refeicao', 'parar lembretes de refeicoes', 'cancelar lembretes de refeicoes', 'ativar lembretes de refeicoes'):
+            enabled = command.startswith('ativar')
+            self.db.execute('UPDATE coaching SET meal_reminders=?,updated=? WHERE patient_id=?',(int(enabled),time.time(),patient_id))
+            return ('Combinado! Vou lembrar você de registrar o café às 08:00, o almoço às 12:00 e o jantar às 20:00.' if enabled else
+                    'Combinado, parei os lembretes das refeições. Você pode continuar enviando seus registros normalmente.')
         configuring = p['stage'] in ('reminders', 'reminder_count', 'reminder_hours', 'reminder_confirm', 'hours')
         if command in ('parar lembretes', 'cancelar lembretes', 'parar lembretes de agua', 'cancelar lembretes de agua') or configuring and command in ('nao', 'nao quero', 'agora nao', 'cancelar'):
             self.db.execute("UPDATE coaching SET reminders=0,stage='done',updated=? WHERE patient_id=?", (time.time(), patient_id))
+            if command in ('parar lembretes','cancelar lembretes'):
+                self.db.execute('UPDATE coaching SET meal_reminders=0 WHERE patient_id=?',(patient_id,))
+                return 'Combinado, parei os lembretes de água e das refeições. Nosso acompanhamento continua por aqui.'
             return 'Combinado, os lembretes de água foram cancelados. Nosso acompanhamento continua por aqui.'
         if command in ('ativar lembretes', 'ativar lembretes de agua'):
             self.db.execute("UPDATE coaching SET stage='reminders',reminders=0,reminder_count=NULL,updated=? WHERE patient_id=?", (time.time(), patient_id))
@@ -122,6 +136,7 @@ class Coaching:
         from daily_progress import water_goal_reached
         now = now or datetime.now(timezone.utc)
         local = now.astimezone(BRASILIA)
+        self.schedule_meals(now)
         rows = self.db.execute('SELECT c.*,p.phone,p.consent_version FROM coaching c JOIN patients p ON p.id=c.patient_id WHERE c.reminders=1 AND c.stage=\'done\' AND p.consent=1 AND p.verified=1').fetchall()
         for p in rows:
             for hour in json.loads(p['hours']):
@@ -140,6 +155,8 @@ class Coaching:
                     self.db.execute('INSERT INTO notifications(id,body) VALUES(?,?)', (event_id, json.dumps(body)))
 
     def reminder(self, event_id, patient_id, now=None):
+        if event_id.startswith('reminder:meal:'):
+            return self.meal_reminder(event_id, patient_id, now)
         from daily_progress import water_goal_reached
         now = time.time() if now is None else now
         p = self.get(patient_id)
@@ -151,3 +168,41 @@ class Coaching:
             return None
         name = f", {p['name']}" if p['name'] else ''
         return f'Oi{name}! Uma pausa para lembrar da água. 💧 Se beber, pode me contar a quantidade que eu anoto.'
+
+    def meal_recorded(self, patient_id, meal_type, day):
+        from daily_progress import diary_rows
+        return any(record['kind']=='meal' and record.get('mealType')==meal_type
+                   for _,record in diary_rows(self.db,patient_id,day))
+
+    def schedule_meals(self, now):
+        local = now.astimezone(BRASILIA)
+        patients = self.db.execute("SELECT c.patient_id,p.phone,p.consent_version FROM coaching c JOIN patients p ON p.id=c.patient_id WHERE c.meal_reminders=1 AND c.stage='done' AND p.consent=1 AND p.verified=1").fetchall()
+        for meal_type, hour in [('breakfast',8),('lunch',12),('dinner',20)]:
+            due = local.replace(hour=hour,minute=0,second=0,microsecond=0)
+            if not 0 <= (local-due).total_seconds() < 300:
+                continue
+            for patient in patients:
+                owner = patient['patient_id']
+                if self.meal_recorded(owner,meal_type,local.date()):
+                    continue
+                event_id = f'reminder:meal:{owner}:{meal_type}:{local.date().isoformat()}'
+                added = self.db.execute('INSERT OR IGNORE INTO meal_reminder_slots VALUES(?,?,?,?,?)',
+                    (event_id,owner,meal_type,due.isoformat(),now.timestamp())).rowcount
+                if added:
+                    body = {'kind':'reminder','eventId':event_id,'userId':owner,'phone':patient['phone'],
+                            'consent':{'granted':True,'version':patient['consent_version'],'at':now.isoformat()}}
+                    self.db.execute('INSERT INTO notifications(id,body) VALUES(?,?)',(event_id,json.dumps(body)))
+
+    def meal_reminder(self, event_id, patient_id, now=None):
+        now = time.time() if now is None else now
+        preference = self.get(patient_id)
+        row = self.db.execute('SELECT * FROM meal_reminder_slots WHERE event_id=? AND patient_id=?',(event_id,patient_id)).fetchone()
+        patient = self.db.execute('SELECT consent,verified FROM patients WHERE id=?',(patient_id,)).fetchone()
+        if not row or not preference or not preference['meal_reminders'] or preference['stage']!='done' or not patient or not patient['consent'] or not patient['verified'] or not 0 <= now-row['created'] < 600:
+            return None
+        day = datetime.fromtimestamp(now,BRASILIA).date()
+        if datetime.fromisoformat(row['slot']).date()!=day or self.meal_recorded(patient_id,row['meal_type'],day):
+            return None
+        name = f', {preference["name"]}' if preference['name'] else ''
+        meal = {'breakfast':'café da manhã','lunch':'almoço','dinner':'jantar'}[row['meal_type']]
+        return f'Oi{name}! Passando para lembrar de registrar seu {meal}. Quando fizer a refeição, pode me mandar uma foto, um áudio ou contar o que comeu que eu anoto para você. 😊'

@@ -1,6 +1,6 @@
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from unittest.mock import patch
 import test_app as fixtures
 
@@ -90,6 +90,54 @@ class CoachingTests(unittest.TestCase):
         self.assertEqual(self.store.ingest(event, 'nutri')['action'], 'ignore')
         self.store.coaching.schedule(datetime(2026, 11, 6, 12, 8, tzinfo=timezone.utc))
         self.assertEqual(self.store.db.execute('SELECT count(*) FROM reminder_slots').fetchone()[0], 0)
+
+    def test_meal_reminders_have_three_times_and_are_independent_of_water(self):
+        from coaching import BRASILIA
+        self.verify()
+        self.store.db.execute("UPDATE coaching SET reminders=0,name='Luiz' WHERE patient_id=?",(self.patient['id'],))
+        day=datetime.now(BRASILIA)-timedelta(days=1)
+        for hour, meal in [(8,'café da manhã'),(12,'almoço'),(20,'jantar')]:
+            now=day.replace(hour=hour,minute=0,second=0,microsecond=0)
+            self.store.coaching.schedule(now)
+            self.store.coaching.schedule(now)
+            row=self.store.db.execute('SELECT * FROM meal_reminder_slots ORDER BY created DESC LIMIT 1').fetchone()
+            with patch('coaching.time.time',return_value=now.timestamp()):
+                message=self.store.coaching.reminder(row['event_id'],self.patient['id'])
+                self.assertIn(meal,message)
+                self.assertIn('Luiz',message)
+                body=json.loads(self.store.db.execute('SELECT body FROM notifications WHERE id=?',(row['event_id'],)).fetchone()[0])
+                job=self.store.ingest(body,'nutri')
+                self.assertEqual(job['action'],'reply')
+                self.assertTrue(self.reserve(job)['approved'])
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM meal_reminder_slots').fetchone()[0],3)
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM reminder_slots').fetchone()[0],0)
+
+    def test_registered_meal_or_cancellation_blocks_pending_meal_reminder(self):
+        from coaching import BRASILIA
+        self.verify()
+        now=(datetime.now(BRASILIA)-timedelta(days=1)).replace(hour=12,minute=0,second=0,microsecond=0)
+        self.store.coaching.schedule(now)
+        row=self.store.db.execute('SELECT * FROM meal_reminder_slots').fetchone()
+        self.store.records.propose(self.patient['id'],'meal-before-send',{'kind':'meal','text':'Arroz branco cozido','quantity':100,'unit':'g','mealType':'lunch','occurredAt':now.isoformat()},auto_save=True)
+        self.assertIsNone(self.store.coaching.reminder(row['event_id'],self.patient['id'],now.timestamp()))
+        self.enter('parar lembretes de refeições',901)
+        self.store.coaching.schedule(now.replace(hour=20))
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM meal_reminder_slots').fetchone()[0],1)
+        self.enter('ativar lembretes de refeições',902)
+        self.store.coaching.schedule(now.replace(hour=20))
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM meal_reminder_slots').fetchone()[0],2)
+        self.enter('SAIR',903)
+        dinner=self.store.db.execute("SELECT * FROM meal_reminder_slots WHERE meal_type='dinner'").fetchone()
+        self.assertIsNone(self.store.coaching.reminder(dinner['event_id'],self.patient['id'],now.replace(hour=20).timestamp()))
+
+    def test_already_logged_meal_is_not_queued_and_missed_times_are_not_replayed(self):
+        from coaching import BRASILIA
+        self.verify()
+        now=(datetime.now(BRASILIA)-timedelta(days=1)).replace(hour=8,minute=0,second=0,microsecond=0)
+        self.store.records.propose(self.patient['id'],'breakfast-done',{'kind':'meal','text':'Banana nanica','quantity':100,'unit':'g','mealType':'breakfast','occurredAt':now.isoformat()},auto_save=True)
+        self.store.coaching.schedule(now)
+        self.store.coaching.schedule(now.replace(hour=12,minute=6))
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM meal_reminder_slots').fetchone()[0],0)
 
 
     def test_goal_greeting_preferences_are_persistent_and_reach_pdf_context(self):
