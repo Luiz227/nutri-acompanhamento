@@ -76,6 +76,8 @@ def summarize(records):
     missing = set()
     estimated = False
     for record in records:
+        if record.get('estimateSource') == 'photo' and record.get('visualConfidence') == 'low':
+            missing.update(key for key, _, _ in METRICS[:-1])
         if record['kind'] == 'water':
             totals['waterMl'] += record['quantity']
         if record['kind'] != 'meal':

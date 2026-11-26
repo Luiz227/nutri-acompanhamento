@@ -187,4 +187,6 @@ const workflow = { name: 'Nutri - Aplicativo + Evolution API + IA', nodes, conne
     saveManualExecutions: false, saveExecutionProgress: false, executionTimeout: 240 },
   pinData: {}, tags: [] };
 writeFileSync(new URL('./nutri-evolution.json', import.meta.url), JSON.stringify(workflow, null, 2) + '\n');
+writeFileSync(new URL('./atualizar-leitura-foto.js', import.meta.url),
+  '// Substitua somente a funcao visionPrompt no no Preparar leitura da foto.\n// Preserve a linha return final do seu no, com os nomes das suas conexoes.\n' + agent.visionPrompt.toString() + '\n');
 console.log(`Gerado: ${nodes.length} nós. Fluxo desativado, sem segredos.`);

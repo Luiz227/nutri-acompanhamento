@@ -29,6 +29,21 @@ ALIASES = {
     'feijoada tradicional': 'feijoada', 'feijoada com carne': 'feijoada',
     'feijoada caseira': 'feijoada', 'coxinha de frango': 'coxinha',
     'coxinha de galinha': 'coxinha',
+    'baiao de 2': 'baiao de dois',
+    'arroz de carreteiro': 'arroz carreteiro',
+    'feijao a tropeira': 'feijao tropeiro',
+    'feijao tropeiro mineiro': 'feijao tropeiro',
+    'moqueca de peixe baiana': 'moqueca baiana',
+    'moqueca baiana de peixe': 'moqueca baiana',
+    'moqueca de peixe capixaba': 'moqueca capixaba',
+    'moqueca capixaba de peixe': 'moqueca capixaba',
+    'arroz com galinha': 'galinhada',
+    'cuscuz a paulista': 'cuscuz paulista',
+    'angu de fuba': 'angu de milho',
+    'acaraje baiano': 'acaraje',
+    'vatapa baiano': 'vatapa',
+    'estrogonofe': 'strogonoff',
+    'strogonofe': 'strogonoff',
 }
 # The IBGE composition references a beef croquette and wheat couscous for these.
 INCOMPATIBLE_COMPOSITION = {8500205, 6902901}
@@ -61,7 +76,15 @@ def catalogue():
 
 def exact_entry(text):
     name = normalized(text)
-    hits = catalogue()[0].get(ALIASES.get(name, name), ())
+    name = ALIASES.get(name, name)
+    foods = catalogue()[0]
+    hits = foods.get(name, ())
+    if not hits:
+        # Reordering the same fully specified words is safe; ingredients and
+        # preparation remain mandatory. Never choose by a shared first word.
+        words = sorted(name.split())
+        hits = [entry for label, entries in foods.items() if sorted(label.split()) == words for entry in entries]
+        hits = list({(entry[0],entry[1]):entry for entry in hits}.values())
     return hits[0] if len(hits) == 1 else None
 
 

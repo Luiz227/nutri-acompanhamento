@@ -20,7 +20,7 @@ PUBLIC_BASE_URL=https://testee-nutri-api.flgmd4.easypanel.host
 `PUBLIC_BASE_URL` deve ser exatamente a origem HTTPS usada para abrir o site, sem caminho adicional. Se adicionar um domínio próprio ao site, atualize essa variável para o novo endereço. A chave em `EVOLUTION_API_KEY` é a credencial usada para enviar mensagens pela Evolution. Ela fica somente no servidor.
 
 5. Clique em **Implantar**.
-6. Abra `/healthz`. Confira `apiVersion: 27` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
+6. Abra `/healthz`. Confira `apiVersion: 28` e `webAuthConfigured: true`. Esse indicador confirma a configuração local das credenciais. O recebimento do código valida a conexão real com a Evolution.
 7. Abra o domínio do serviço para acessar o site. O endereço informado no aplicativo e em `backendBaseUrl` do n8n continua atendendo as rotas de API.
 
 ## Cadastro, acesso e recuperação

@@ -9,7 +9,7 @@ import difflib
 import random
 from nutrition_sources import ProductSource
 from food_composition import additional_food
-from pof import UNIT_LABELS, pof_food
+from pof import UNIT_LABELS, pof_food, catalogue as pof_catalogue
 from portions import portion
 from menu_foods import menu_options, resolve_menu
 from photo_meals import clean_food_name
@@ -63,6 +63,14 @@ FOOD_ALIASES = {
     'file de peito de frango sem pele grelhado': 'Frango, peito, sem pele, grelhado',
     'peito de frango sem pele cozido': 'Frango, peito, sem pele, cozido',
     'peito de frango sem pele cru': 'Frango, peito, sem pele, cru',
+    'cuscuz de milho': 'Cuscuz, de milho, cozido com sal',
+    'cuscuz nordestino': 'Cuscuz, de milho, cozido com sal',
+    'cuscuz de milho cozido': 'Cuscuz, de milho, cozido com sal',
+    'cuscuz paulista': 'Cuscuz, paulista',
+    'feijao a tropeira': 'Feijão tropeiro mineiro',
+    'feijao tropeiro': 'Feijão tropeiro mineiro',
+    'arroz de carreteiro': 'Arroz carreteiro',
+    'tapioca com manteiga': 'Tapioca, com manteiga',
 }
 
 MEAL_LABELS = {'breakfast': 'Café da manhã', 'lunch': 'Almoço', 'dinner': 'Jantar', 'snack': 'Lanche'}
@@ -177,11 +185,20 @@ class Records:
         tokens = {t for t in query.split() if len(t) >= 3 and t not in ('com', 'uma', 'meu', 'hoje', 'mais')}
         aliases = {normalized(name) for alias, name in FOOD_ALIASES.items()
                    if f' {alias} ' in f' {query} '}
+        available = self.foods + [{'name': entries[0][2]} for entries in pof_catalogue()[0].values() if entries]
         scored = [(sum(t in normalized(f['name']).split() for t in tokens)
                    + (10 if normalized(f['name']) in aliases else 0)
                    + (3 if 'frango' in tokens and ('file' in tokens or 'peito' in tokens)
-                      and normalized(f['name']).startswith('frango peito ') else 0), f) for f in self.foods]
-        return [{'name': f['name']} for score, f in sorted(scored, key=lambda pair: -pair[0]) if score > 0][:12]
+                      and normalized(f['name']).startswith('frango peito ') else 0), f) for f in available]
+        results, seen = [], set()
+        for score, food in sorted(scored, key=lambda pair: -pair[0]):
+            name = normalized(food['name'])
+            if score > 0 and name not in seen:
+                seen.add(name)
+                results.append({'name':food['name']})
+            if len(results) == 12:
+                break
+        return results
 
     def reviewed(self, text):
         name=clean_food_name(text)
@@ -240,6 +257,12 @@ class Records:
             # Only compare within the same named food family.
             family = name.split()[0]
             if family not in words:
+                continue
+            # Do not turn a cooked plate into the dry/raw staple merely because
+            # both names share the same family. Nor swap light/diet variants.
+            if family in ('arroz','feijao','macarrao','lentilha','grao') and tokens & {'cru','crua'} and not words & {'cru','crua'}:
+                continue
+            if (tokens & {'light','diet','desnatado','vegano','vegetariano'}) - words:
                 continue
             if (tokens & {'carreteiro','milanesa','risoto','recheado','recheada','bolonhesa','queijo','chocolate','bacon','toucinho','linguica'}) - words:
                 continue
@@ -331,7 +354,7 @@ class Records:
             paragraphs.append(f"{title}: {total('energyKcal')} kcal.\nProteína: {total('proteinG')} g | Carboidratos: {total('carbsG')} g | Gordura: {total('fatG')} g.")
         if unknown:
             names=', '.join(r['text'][:40] for r in unknown[:4])
-            paragraphs.append(f'Não incluí {names} no cálculo porque não foi possível identificar com segurança.' if known else 'Não consegui identificar esta refeição com segurança. Pode enviar outra foto mais nítida, mostrando o prato inteiro?')
+            paragraphs.append(f'Não incluí {names} no cálculo porque não foi possível identificar com segurança. Pode mandar uma foto mais próxima só dessa parte?' if known else 'Não consegui identificar esta refeição com segurança. Pode enviar outra foto mais nítida, mostrando o prato inteiro?')
         message='\n\n'.join(paragraphs)
         if len(message)>1800:
             # Keep individual food/energy bubbles; total retains all four macros.
